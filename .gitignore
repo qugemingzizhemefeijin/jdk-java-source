@@ -11,6 +11,9 @@ target/
 .project
 .classpath
 .externalToolBuilders
+bin/
+.factorypath
+.springBeans
 
 # idea ignore
 .idea/
@@ -29,4 +32,5 @@ target/
 .DS_Store
 Thumbs.db
 
-/bin/
+#ios
+.apt_generated/

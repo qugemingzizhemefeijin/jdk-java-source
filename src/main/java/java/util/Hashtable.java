@@ -186,8 +186,12 @@ public class Hashtable<K,V>
 
         if (initialCapacity==0)
             initialCapacity = 1;
+		//默认0.75
         this.loadFactor = loadFactor;
+		//默认就初始化initialCapacity大小的数组，这一点跟HashMap不一样
         table = new Entry<?,?>[initialCapacity];
+		//扩容阈值最大不超过Integer.MAX_VALUE - 7。
+		//如果都走默认参数的话，第一次扩容阈值在8。
         threshold = (int)Math.min(initialCapacity * loadFactor, MAX_ARRAY_SIZE + 1);
     }
 
@@ -221,6 +225,7 @@ public class Hashtable<K,V>
      * @since   1.2
      */
     public Hashtable(Map<? extends K, ? extends V> t) {
+		//插入Map的话，initialCapacity = 11或者是map.size()的2倍
         this(Math.max(2*t.size(), 11), 0.75f);
         putAll(t);
     }
@@ -294,6 +299,7 @@ public class Hashtable<K,V>
         }
 
         Entry<?,?> tab[] = table;
+		//这种i--写法没见过，有意思。
         for (int i = tab.length ; i-- > 0 ;) {
             for (Entry<?,?> e = tab[i] ; e != null ; e = e.next) {
                 if (e.value.equals(value)) {
@@ -333,7 +339,10 @@ public class Hashtable<K,V>
     public synchronized boolean containsKey(Object key) {
         Entry<?,?> tab[] = table;
         int hash = key.hashCode();
+		//Integer.MAX_VALUE = 0x7FFFFFFF
+		//计算hash索引值
         int index = (hash & 0x7FFFFFFF) % tab.length;
+		//直接定位数组solt，然后如果是链表直接循环，选判断两个hash是否一致，然后判断key是否相同。
         for (Entry<?,?> e = tab[index] ; e != null ; e = e.next) {
             if ((e.hash == hash) && e.key.equals(key)) {
                 return true;
@@ -391,7 +400,9 @@ public class Hashtable<K,V>
         Entry<?,?>[] oldMap = table;
 
         // overflow-conscious code
+		//扩容一倍+1
         int newCapacity = (oldCapacity << 1) + 1;
+		//这里判断如果溢出了，则直接为MAX_ARRAY_SIZE
         if (newCapacity - MAX_ARRAY_SIZE > 0) {
             if (oldCapacity == MAX_ARRAY_SIZE)
                 // Keep running with MAX_ARRAY_SIZE buckets
@@ -403,15 +414,20 @@ public class Hashtable<K,V>
         modCount++;
         threshold = (int)Math.min(newCapacity * loadFactor, MAX_ARRAY_SIZE + 1);
         table = newMap;
-
+		//循环老数组
         for (int i = oldCapacity ; i-- > 0 ;) {
+			//循环链表
             for (Entry<K,V> old = (Entry<K,V>)oldMap[i] ; old != null ; ) {
                 Entry<K,V> e = old;
                 old = old.next;
-
+                
+                //计算索引槽位
                 int index = (e.hash & 0x7FFFFFFF) % newCapacity;
+                //将newMap对应槽位的数据放到e.next上
                 e.next = (Entry<K,V>)newMap[index];
+                //将e放置到newMap对应槽位
                 newMap[index] = e;
+                //新插入的数据如果跟老的数据有index冲突，则老的数据挂在新数据的next字段上
             }
         }
     }
