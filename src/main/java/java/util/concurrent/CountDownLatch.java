@@ -161,18 +161,22 @@ public class CountDownLatch {
     private static final class Sync extends AbstractQueuedSynchronizer {
         private static final long serialVersionUID = 4982264981922014374L;
 
+        // 设置状态码 count
         Sync(int count) {
             setState(count);
         }
 
+        // 获取当前剩余的数量
         int getCount() {
             return getState();
         }
 
+        // 申请共享锁逻辑，当状态字段为0则返回1(解锁线程)，否则返回-1(不动)
         protected int tryAcquireShared(int acquires) {
             return (getState() == 0) ? 1 : -1;
         }
 
+        // 每次countDown state - 1
         protected boolean tryReleaseShared(int releases) {
             // Decrement count; signal when transition to zero
             for (;;) {
@@ -181,7 +185,7 @@ public class CountDownLatch {
                     return false;
                 int nextc = c-1;
                 if (compareAndSetState(c, nextc))
-                    return nextc == 0;
+                    return nextc == 0;//当state=0则代表可以唤醒等待的线程了
             }
         }
     }
@@ -278,8 +282,7 @@ public class CountDownLatch {
     }
 
     /**
-     * Decrements the count of the latch, releasing all waiting threads if
-     * the count reaches zero.
+     * 减少锁存器的计数，如果计数达到零，则释放所有等待线程。
      *
      * <p>If the current count is greater than zero then it is decremented.
      * If the new count is zero then all waiting threads are re-enabled for
@@ -292,7 +295,7 @@ public class CountDownLatch {
     }
 
     /**
-     * Returns the current count.
+     * 返回当前计数.
      *
      * <p>This method is typically used for debugging and testing purposes.
      *
