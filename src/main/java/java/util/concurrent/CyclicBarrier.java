@@ -156,9 +156,9 @@ public class CyclicBarrier {
     private final ReentrantLock lock = new ReentrantLock();
     /** Condition to wait on until tripped */
     private final Condition trip = lock.newCondition();
-    /** The number of parties */
+    /** 栅栏指定的要求条件数量 */
     private final int parties;
-    /* The command to run when tripped */
+    /* 当栅栏到指定条件的时候运行的命令，一般用于打印调试信息等(由最后一个到达条件的线程执行) */
     private final Runnable barrierCommand;
     /** The current generation */
     private Generation generation = new Generation();
@@ -166,25 +166,33 @@ public class CyclicBarrier {
     /**
      * Number of parties still waiting. Counts down from parties to 0
      * on each generation.  It is reset to parties on each new
-     * generation or when broken.
+     * generation or when broken.<br><br>
+     *
+     * 当前栅栏正在等待线程资源进来的数量
      */
     private int count;
 
     /**
      * Updates state on barrier trip and wakes up everyone.
-     * Called only while holding lock.
+     * Called only while holding lock.<br><br>
+     *
+     * 唤醒所有的等待者，并重置下一次的循环栅栏状态
      */
     private void nextGeneration() {
         // signal completion of last generation
+        // 唤醒上一次等待的所有的线程
         trip.signalAll();
         // set up next generation
+        // 重置下一代栅栏
         count = parties;
         generation = new Generation();
     }
 
     /**
      * Sets current barrier generation as broken and wakes up everyone.
-     * Called only while holding lock.
+     * Called only while holding lock.<br><br>
+     *
+     * 破坏当前的栅栏，并唤醒所有的等待者。
      */
     private void breakBarrier() {
         generation.broken = true;
@@ -193,25 +201,30 @@ public class CyclicBarrier {
     }
 
     /**
-     * Main barrier code, covering the various policies.
+     * 主要代码，涵盖各种政策.
+     * @param timed 是否是有时间等待要求
+     * @param nanos 等待时间，纳秒
+     * @return int 返回当前线程申请资源时候剩余的待等待资源
      */
     private int dowait(boolean timed, long nanos)
         throws InterruptedException, BrokenBarrierException,
                TimeoutException {
+        //这里加锁了，要求所有的线程必须排队进来执行逻辑
         final ReentrantLock lock = this.lock;
         lock.lock();
         try {
             final Generation g = generation;
-
+            // 如果栅栏被破坏了，则直接抛出异常(如果某个线程破坏了栅栏，则其它线程进来就一律报错)
             if (g.broken)
                 throw new BrokenBarrierException();
-
+            // 如果当前线程被中断了，则直接破坏栅栏，并抛出异常
             if (Thread.interrupted()) {
                 breakBarrier();
                 throw new InterruptedException();
             }
 
             int index = --count;
+            // 当等待数为0，则唤醒所有等待的线程，并开始下一次的等待(重置下一代栅栏)
             if (index == 0) {  // tripped
                 boolean ranAction = false;
                 try {
@@ -222,43 +235,45 @@ public class CyclicBarrier {
                     nextGeneration();
                     return 0;
                 } finally {
+                    // 如果最后一个线程执行命令出错了，则直接破坏栅栏，唤醒所有等待的线程并在其它线程中抛出BrokenBarrierException异常
                     if (!ranAction)
                         breakBarrier();
                 }
             }
 
-            // loop until tripped, broken, interrupted, or timed out
+            // 循环直到跳闸，断开，中断或超时
             for (;;) {
                 try {
                     if (!timed)
-                        trip.await();
+                        trip.await();//将线程加入到条件等待，等待栅栏被破坏后一起被唤醒并执行
                     else if (nanos > 0L)
                         nanos = trip.awaitNanos(nanos);
                 } catch (InterruptedException ie) {
-                    if (g == generation && ! g.broken) {
+                    if (g == generation && ! g.broken) {//如果线程中断了，并且当前栅栏未破坏，则直接破坏栅栏并抛出中断异常
                         breakBarrier();
                         throw ie;
                     } else {
                         // We're about to finish waiting even if we had not
                         // been interrupted, so this interrupt is deemed to
                         // "belong" to subsequent execution.
-                        Thread.currentThread().interrupt();
+                        Thread.currentThread().interrupt();//如果已经被中断，则设置清除当前线程的中断标识
                     }
                 }
-
+                // 如果被其它线程破坏了栅栏，则抛出BrokenBarrierException
                 if (g.broken)
                     throw new BrokenBarrierException();
 
+                //如果栅栏已经换代了，则直接返回，并返回当前线程申请资源时候剩余的待等待资源
                 if (g != generation)
                     return index;
-
+                // 如果设置了超时时间，并且时间到了，则破坏栅栏，并抛出TimeoutException
                 if (timed && nanos <= 0L) {
                     breakBarrier();
                     throw new TimeoutException();
                 }
             }
         } finally {
-            lock.unlock();
+            lock.unlock();//线程成功await后则解锁，并让其它等待线程执行进来
         }
     }
 
@@ -278,7 +293,7 @@ public class CyclicBarrier {
         if (parties <= 0) throw new IllegalArgumentException();
         this.parties = parties;
         this.count = parties;
-        this.barrierCommand = barrierAction;
+        this.barrierCommand = barrierAction;//最后一个到达条件的线程执行的命令
     }
 
     /**
@@ -291,11 +306,11 @@ public class CyclicBarrier {
      * @throws IllegalArgumentException if {@code parties} is less than 1
      */
     public CyclicBarrier(int parties) {
-        this(parties, null);
+        this(parties, null);//申明无到达条件执行命令的栅栏
     }
 
     /**
-     * Returns the number of parties required to trip this barrier.
+     * 返回此栅栏所需的线程数目
      *
      * @return the number of parties required to trip this barrier
      */
@@ -357,6 +372,7 @@ public class CyclicBarrier {
      *         broken when {@code await} was called, or the barrier
      *         action (if present) failed due to an exception
      */
+    // 不支持超时等待的栅栏动作
     public int await() throws InterruptedException, BrokenBarrierException {
         try {
             return dowait(false, 0L);
@@ -428,6 +444,7 @@ public class CyclicBarrier {
      *         when {@code await} was called, or the barrier action (if
      *         present) failed due to an exception
      */
+    // 支持指定超时等待的栅栏动作
     public int await(long timeout, TimeUnit unit)
         throws InterruptedException,
                BrokenBarrierException,
@@ -436,7 +453,7 @@ public class CyclicBarrier {
     }
 
     /**
-     * Queries if this barrier is in a broken state.
+     * 查询此屏障是否处于断开状态（此方法返回的是转态一致性的）
      *
      * @return {@code true} if one or more parties broke out of this
      *         barrier due to interruption or timeout since
@@ -462,6 +479,7 @@ public class CyclicBarrier {
      * and choose one to perform the reset.  It may be preferable to
      * instead create a new barrier for subsequent use.
      */
+    // 破坏栅栏，唤醒所有的线程，并重置栅栏
     public void reset() {
         final ReentrantLock lock = this.lock;
         lock.lock();
@@ -474,8 +492,7 @@ public class CyclicBarrier {
     }
 
     /**
-     * Returns the number of parties currently waiting at the barrier.
-     * This method is primarily useful for debugging and assertions.
+     * 返回当前在栅栏处等待的线程数量。此方法主要用于调试和断言。
      *
      * @return the number of parties currently blocked in {@link #await}
      */

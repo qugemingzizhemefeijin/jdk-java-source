@@ -92,15 +92,14 @@ public class CopyOnWriteArrayList<E>
     implements List<E>, RandomAccess, Cloneable, java.io.Serializable {
     private static final long serialVersionUID = 8673264195747942595L;
 
-    /** The lock protecting all mutators */
+    /** 全局锁 */
     final transient ReentrantLock lock = new ReentrantLock();
 
-    /** The array, accessed only via getArray/setArray. */
+    /** 仅通过getArray / setArray访问的数组. */
     private transient volatile Object[] array;
 
     /**
-     * Gets the array.  Non-private so as to also be accessible
-     * from CopyOnWriteArraySet class.
+     * 获取数组。非私有的，以便也可以从CopyOnWriteArraySet类访问.
      */
     final Object[] getArray() {
         return array;
@@ -114,7 +113,7 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * Creates an empty list.
+     * 创建一个空列表.
      */
     public CopyOnWriteArrayList() {
         setArray(new Object[0]);
@@ -135,6 +134,9 @@ public class CopyOnWriteArrayList<E>
         else {
             elements = c.toArray();
             // c.toArray might (incorrectly) not return Object[] (see 6260652)
+            // java对象的向上转型，子类数组转换成父类数组是允许的。
+            // 这个主要是解决某些集合类返回的看似返回的是Object数组，实际是比如String数组。造成后面无法赋值的问题。
+            // 所以直接执行数组元素拷贝操作
             if (elements.getClass() != Object[].class)
                 elements = Arrays.copyOf(elements, elements.length, Object[].class);
         }
@@ -142,7 +144,7 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * Creates a list holding a copy of the given array.
+     * 创建一个包含给定数组副本的列表.
      *
      * @param toCopyIn the array (a copy of this array is used as the
      *        internal array)
@@ -153,7 +155,7 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * Returns the number of elements in this list.
+     * 返回此列表中的元素数.
      *
      * @return the number of elements in this list
      */
@@ -162,7 +164,7 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * Returns {@code true} if this list contains no elements.
+     * 返回此列表是否是空的
      *
      * @return {@code true} if this list contains no elements
      */
@@ -178,13 +180,12 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * static version of indexOf, to allow repeated calls without
-     * needing to re-acquire array each time.
-     * @param o element to search for
-     * @param elements the array
-     * @param index first index to search
-     * @param fence one past last index to search
-     * @return index of element, or -1 if absent
+     * 静态版本的indexOf，允许重复调用而无需每次都重新获取数组。.
+     * @param o 搜索元素
+     * @param elements 数组
+     * @param index 开始搜索的位置
+     * @param fence 最后截止的位置
+     * @return 元素的索引；如果不存在，则为-1
      */
     private static int indexOf(Object o, Object[] elements,
                                int index, int fence) {
@@ -201,11 +202,11 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * static version of lastIndexOf.
-     * @param o element to search for
-     * @param elements the array
-     * @param index first index to search
-     * @return index of element, or -1 if absent
+     * lastIndexOf的静态版本.
+     * @param o 搜索元素
+     * @param elements 数组
+     * @param index 要搜索的第一个索引
+     * @return 元素的索引；如果不存在，则为-1
      */
     private static int lastIndexOf(Object o, Object[] elements, int index) {
         if (o == null) {
@@ -292,8 +293,7 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * Returns a shallow copy of this list.  (The elements themselves
-     * are not copied.)
+     * 返回此列表的浅拷贝副本。
      *
      * @return a clone of this list
      */
@@ -302,7 +302,7 @@ public class CopyOnWriteArrayList<E>
             @SuppressWarnings("unchecked")
             CopyOnWriteArrayList<E> clone =
                 (CopyOnWriteArrayList<E>) super.clone();
-            clone.resetLock();
+            clone.resetLock();//重置锁对象(new ReentrantLock()并且将保持lock属性刷新到主存)
             return clone;
         } catch (CloneNotSupportedException e) {
             // this shouldn't happen, since we are Cloneable
@@ -316,7 +316,9 @@ public class CopyOnWriteArrayList<E>
      *
      * <p>The returned array will be "safe" in that no references to it are
      * maintained by this list.  (In other words, this method must allocate
-     * a new array).  The caller is thus free to modify the returned array.
+     * a new array).  The caller is thus free to modify the returned array.<br><br>
+     *
+     * 返回一个深拷贝的数组
      *
      * <p>This method acts as bridge between array-based and collection-based
      * APIs.
@@ -397,8 +399,7 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * Replaces the element at the specified position in this list with the
-     * specified element.
+     * 用指定的元素替换此列表中指定位置的元素。
      *
      * @throws IndexOutOfBoundsException {@inheritDoc}
      */
@@ -408,7 +409,7 @@ public class CopyOnWriteArrayList<E>
         try {
             Object[] elements = getArray();
             E oldValue = get(elements, index);
-
+            // 如果替换的元素与原始元素不一致，则需要拷贝出一个数组并将当前数组替换掉
             if (oldValue != element) {
                 int len = elements.length;
                 Object[] newElements = Arrays.copyOf(elements, len);
@@ -416,6 +417,12 @@ public class CopyOnWriteArrayList<E>
                 setArray(newElements);
             } else {
                 // Not quite a no-op; ensures volatile write semantics
+                // 这段代码并未对elements做任何改动，实现的volatile语意并不对CopyOnWriteArrayList实例产生任何影响，为什么还是要保留这行语句？
+                //
+                // 目的就是让另外一个线程在get时能马上读到更新后的值。
+                // 意思是说这行不完全是一个空操作，而是用来确保volatile的写语义。
+                // volatile的写语义之一就是插入一个lock前缀的指令，让volatile所修饰字段的缓存行（cache line）无效。
+                // 一旦cache line无效，getArray时，必须先重新填充cache line，这样处理器就不会使用当前处理器缓存行里的旧值。
                 setArray(elements);
             }
             return oldValue;
@@ -425,7 +432,7 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * Appends the specified element to the end of this list.
+     * 将指定的元素追加到此列表的末尾.
      *
      * @param e element to be appended to this list
      * @return {@code true} (as specified by {@link Collection#add})

@@ -1193,9 +1193,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     }
 
     /**
-     * Attempts to acquire in shared mode. This method should query if
-     * the state of the object permits it to be acquired in the shared
-     * mode, and if so to acquire it.
+     * 尝试以共享模式进行获取。该方法应查询对象的状态是否允许以共享模式获取资源，如果允许则获取资源。此方法一般由子类来实现。
      *
      * <p>This method is always invoked by the thread performing
      * acquire.  If this method reports failure, the acquire method
@@ -1254,19 +1252,13 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     }
 
     /**
-     * Returns {@code true} if synchronization is held exclusively with
-     * respect to the current (calling) thread.  This method is invoked
-     * upon each call to a non-waiting {@link ConditionObject} method.
-     * (Waiting methods instead invoke {@link #release}.)
+     * 如果对于当前（正调用的）线程，同步是以独占方式进行的，则返回 true。
+     * 此方法是在每次调用非等待 AbstractQueuedSynchronizer.conditionObject 方法时调用的。（等待方法则调用 release(int)。）
      *
-     * <p>The default implementation throws {@link
-     * UnsupportedOperationException}. This method is invoked
-     * internally only within {@link ConditionObject} methods, so need
-     * not be defined if conditions are not used.
+     * <p>默认实现将抛出 UnsupportedOperationException。此方法只是 AbstractQueuedSynchronizer.conditionObject 方法内进行内部调用，因此，如果不使用条件，则不需要定义它。
      *
-     * @return {@code true} if synchronization is held exclusively;
-     *         {@code false} otherwise
-     * @throws UnsupportedOperationException if conditions are not supported
+     * @return 如果同步是以独占方式进行的，则返回true；其他情况则返回 false
+     * @throws UnsupportedOperationException 如果不支持这些条件
      */
     protected boolean isHeldExclusively() {
         throw new UnsupportedOperationException();
@@ -1380,9 +1372,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
      * first invoking at least once {@link #tryAcquireShared},
      * returning on success.  Otherwise the thread is queued, possibly
      * repeatedly blocking and unblocking, invoking {@link
-     * #tryAcquireShared} until success. <br>
+     * #tryAcquireShared} until success. <br><br>
      *
-     * acquireShared方法用于在共享模式下获取锁，其中tryAcquireShared由子类自己实现，当tryAcquireShared失败时，即没有成功获取锁的时候，会调用doAcquireShared方法。
+     * acquireShared方法用于在共享模式下获取锁，其中tryAcquireShared由子类自己实现，当tryAcquireShared失败时，即没有成功获取锁的时候，会调用doAcquireShared方法。<br><br>
      *
      * @param arg the acquire argument.  This value is conveyed to
      *        {@link #tryAcquireShared} but is otherwise uninterpreted
@@ -1568,7 +1560,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
      * shared mode (that is, this method is invoked from {@link
      * #tryAcquireShared}) then it is guaranteed that the current thread
      * is not the first queued thread.  Used only as a heuristic in
-     * ReentrantReadWriteLock.
+     * ReentrantReadWriteLock. <br><br>
+     *
+     * 判断阻塞队列中收个节点是否是独占节点
      */
     final boolean apparentlyFirstQueuedIsExclusive() {
         Node h, s;
@@ -1649,7 +1643,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
      * threads may change dynamically while this method traverses
      * internal data structures.  This method is designed for use in
      * monitoring system state, not for synchronization
-     * control.
+     * control.<br><br>
+     *
+     * 返回正在等待资源的线程数量，此值也是一个估计值。
      *
      * @return the estimated number of threads waiting to acquire
      */
@@ -1669,7 +1665,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
      * collection is only a best-effort estimate.  The elements of the
      * returned collection are in no particular order.  This method is
      * designed to facilitate construction of subclasses that provide
-     * more extensive monitoring facilities.
+     * more extensive monitoring facilities.<br><br>
+     *
+     * 返回所有正在等待资源的线程集合，此集合是一个估计值，因为可能资源在不断的更改中。
      *
      * @return the collection of threads
      */
@@ -1687,7 +1685,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
      * Returns a collection containing threads that may be waiting to
      * acquire in exclusive mode. This has the same properties
      * as {@link #getQueuedThreads} except that it only returns
-     * those threads waiting due to an exclusive acquire.
+     * those threads waiting due to an exclusive acquire.<br><br>
+     *
+     * 返回正在以独享方式等待的线程集合，此值也是一个估计值
      *
      * @return the collection of threads
      */
@@ -1707,7 +1707,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
      * Returns a collection containing threads that may be waiting to
      * acquire in shared mode. This has the same properties
      * as {@link #getQueuedThreads} except that it only returns
-     * those threads waiting due to a shared acquire.
+     * those threads waiting due to a shared acquire.<br><br>
+     *
+     * 返回正在以共享方式等待的线程集合，此值也是一个估计值
      *
      * @return the collection of threads
      */
@@ -1848,6 +1850,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     }
 
     /**
+     * 让出锁资源（全部，不管加锁了几次），返回的savedState将作为下次竞争到锁的初始的state状态值
      * Invokes release with current state value; returns saved state.(用当前状态值调用释放；返回保存状态)
      * Cancels node and throws exception on failure.(取消节点并在失败时引发异常)
      * @param node the condition node for this wait

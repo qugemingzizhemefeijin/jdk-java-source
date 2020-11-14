@@ -170,31 +170,54 @@ public class Semaphore implements java.io.Serializable {
             setState(permits);
         }
 
+        /**
+         * 返回可用的许可证数量
+         * @return int
+         */
         final int getPermits() {
             return getState();
         }
 
+        /**
+         * 尝试申请共享资源(非公平方式)
+         * @param acquires 默认1
+         * @return int 小于0则线程需要被挂起
+         */
         final int nonfairTryAcquireShared(int acquires) {
             for (;;) {
-                int available = getState();
-                int remaining = available - acquires;
+                int available = getState();//当前可用的数量
+                int remaining = available - acquires;//当前可用数量 - 申请许可数量 = 剩余可用数量
+                // 当前线程进入AQS中的doAcquireSharedInterruptibly方法
+                // 等待可用许可证并挂起，直到被唤醒。
                 if (remaining < 0 ||
                     compareAndSetState(available, remaining))
-                    return remaining;
+                    return remaining;//返回CAS成功后的可用数量
             }
         }
 
+        /**
+         * 尝试释放共享资源
+         * @param releases 默认1
+         * @return boolean 返回是否释放成功
+         */
         protected final boolean tryReleaseShared(int releases) {
             for (;;) {
                 int current = getState();
-                int next = current + releases;
+                int next = current + releases;//当前可用数量 + 释放数量
                 if (next < current) // overflow
                     throw new Error("Maximum permit count exceeded");
+                // 如果许可证释放成功，
+                // 当前线程进入到AQS的doReleaseShared方法，
+                // 唤醒队列中等待许可的线程。
                 if (compareAndSetState(current, next))
                     return true;
             }
         }
 
+        /**
+         * 将许可证数量减去指定的数量，与acquire方法不同在于此方法不会阻塞线程
+         * @param reductions 需要减去的许可证数量
+         */
         final void reducePermits(int reductions) {
             for (;;) {
                 int current = getState();
@@ -206,6 +229,10 @@ public class Semaphore implements java.io.Serializable {
             }
         }
 
+        /**
+         * 将所有许可证清零
+         * @return 返回清零前的许可证数量
+         */
         final int drainPermits() {
             for (;;) {
                 int current = getState();
@@ -216,7 +243,7 @@ public class Semaphore implements java.io.Serializable {
     }
 
     /**
-     * NonFair version
+     * 非公平版本
      */
     static final class NonfairSync extends Sync {
         private static final long serialVersionUID = -2694183684443567898L;
@@ -231,7 +258,7 @@ public class Semaphore implements java.io.Serializable {
     }
 
     /**
-     * Fair version
+     * 公平版本，FairSync中多一个对阻塞队列是否有等待的线程的检查，如果没有，就可以参与许可证的竞争；如果有，线程直接被插入到阻塞队列尾节点并挂起，等待被唤醒。
      */
     static final class FairSync extends Sync {
         private static final long serialVersionUID = 2014338818796000944L;
@@ -240,11 +267,14 @@ public class Semaphore implements java.io.Serializable {
             super(permits);
         }
 
+        //这里跟上面非公平锁最大的区别就是 少了一个检查阻塞队列中是否有等待的线程
         protected int tryAcquireShared(int acquires) {
             for (;;) {
+                // 检查阻塞队列中是否有等待的线程
                 if (hasQueuedPredecessors())
                     return -1;
                 int available = getState();
+                // remaining是剩余的许可数数量
                 int remaining = available - acquires;
                 if (remaining < 0 ||
                     compareAndSetState(available, remaining))
@@ -255,7 +285,9 @@ public class Semaphore implements java.io.Serializable {
 
     /**
      * Creates a {@code Semaphore} with the given number of
-     * permits and nonfair fairness setting.
+     * permits and nonfair fairness setting.<br><br>
+     *
+     * 信号线，给定一个指定的数值来允许同一时间多少线程访问资源
      *
      * @param permits the initial number of permits available.
      *        This value may be negative, in which case releases
