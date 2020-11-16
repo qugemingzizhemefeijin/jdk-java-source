@@ -453,9 +453,7 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * Inserts the specified element at the specified position in this
-     * list. Shifts the element currently at that position (if any) and
-     * any subsequent elements to the right (adds one to their indices).
+     * 将元素插入到指定的位置
      *
      * @throws IndexOutOfBoundsException {@inheritDoc}
      */
@@ -470,14 +468,17 @@ public class CopyOnWriteArrayList<E>
                                                     ", Size: "+len);
             Object[] newElements;
             int numMoved = len - index;
+            //如果插入到末尾，则直接拷贝一个新数组即可
             if (numMoved == 0)
                 newElements = Arrays.copyOf(elements, len + 1);
             else {
+                //否则元素数组+1并分别将两段拷贝
                 newElements = new Object[len + 1];
                 System.arraycopy(elements, 0, newElements, 0, index);
                 System.arraycopy(elements, index, newElements, index + 1,
                                  numMoved);
             }
+            //替换指定索引的值并替换数组
             newElements[index] = element;
             setArray(newElements);
         } finally {
@@ -494,15 +495,16 @@ public class CopyOnWriteArrayList<E>
      */
     public E remove(int index) {
         final ReentrantLock lock = this.lock;
-        lock.lock();
+        lock.lock();// 上锁
         try {
             Object[] elements = getArray();
             int len = elements.length;
             E oldValue = get(elements, index);
             int numMoved = len - index - 1;
-            if (numMoved == 0)
+            if (numMoved == 0)// 移除最后一个位置直接拷贝整个数组-1的数据到新数组
                 setArray(Arrays.copyOf(elements, len - 1));
             else {
+                // 否则需要对指定索引截取两段进行拷贝到新数组并且设置到
                 Object[] newElements = new Object[len - 1];
                 System.arraycopy(elements, 0, newElements, 0, index);
                 System.arraycopy(elements, index + 1, newElements, index,
@@ -529,7 +531,9 @@ public class CopyOnWriteArrayList<E>
      * @return {@code true} if this list contained the specified element
      */
     public boolean remove(Object o) {
+        // 快照
         Object[] snapshot = getArray();
+        // 找到o在Array快照中的索引值(如果在快照中找到了，则需要lock来查找现在的数组对象)
         int index = indexOf(o, snapshot, 0, snapshot.length);
         return (index < 0) ? false : remove(o, snapshot, index);
     }
@@ -544,22 +548,29 @@ public class CopyOnWriteArrayList<E>
         try {
             Object[] current = getArray();
             int len = current.length;
+            // 如果 snapshot 和 current 相等，则直接进行元素移除操作(因为加锁了，所以可以直接操作)
             if (snapshot != current) findIndex: {
+                // index和len最小值
                 int prefix = Math.min(index, len);
+                // 这个for循环相当于是重新判断一下index的值。因为可能因为并发原因造成现有数据与原数据不一致
+                // 循环0-prefix(非全部)，如果current[i] != snapshot[i]，则判断对象与当前current[i]相等则更新index索引值
                 for (int i = 0; i < prefix; i++) {
                     if (current[i] != snapshot[i] && eq(o, current[i])) {
                         index = i;
                         break findIndex;
                     }
                 }
+                //如果前面没有修正index，并且新数组缩容了，则直接false
                 if (index >= len)
                     return false;
-                if (current[index] == o)
+                if (current[index] == o)// 相等就不需要再查询了
                     break findIndex;
-                index = indexOf(o, current, index, len);
+                // 这里为什么不index+1？(因为有可能新数组经历了扩容缩容，所以必须要从index开始循环判断)
+                index = indexOf(o, current, index, len);// 走到这里代表index是小于len的，意味着新的数组长度要大于老的数组，则查询index-len的索引。
                 if (index < 0)
                     return false;
             }
+            //没什么说的了
             Object[] newElements = new Object[len - 1];
             System.arraycopy(current, 0, newElements, 0, index);
             System.arraycopy(current, index + 1,
@@ -595,9 +606,11 @@ public class CopyOnWriteArrayList<E>
                 throw new IndexOutOfBoundsException();
             int newlen = len - (toIndex - fromIndex);
             int numMoved = len - toIndex;
+            // 删除的是末尾数据则直接将0-newlen的数据拷贝即可
             if (numMoved == 0)
                 setArray(Arrays.copyOf(elements, newlen));
             else {
+                // 否则得分段拷贝
                 Object[] newElements = new Object[newlen];
                 System.arraycopy(elements, 0, newElements, 0, fromIndex);
                 System.arraycopy(elements, toIndex, newElements,
@@ -610,13 +623,16 @@ public class CopyOnWriteArrayList<E>
     }
 
     /**
-     * Appends the element, if not present.
+     * Appends the element, if not present.<br><br>
+     *
+     * 追加元素（如果不存在）<br>
      *
      * @param e element to be added to this list, if absent
      * @return {@code true} if the element was added
      */
     public boolean addIfAbsent(E e) {
         Object[] snapshot = getArray();
+        // 如果快照存在则直接返回false，否则需要进行加锁来查询是否能够被添加
         return indexOf(e, snapshot, 0, snapshot.length) >= 0 ? false :
             addIfAbsent(e, snapshot);
     }
@@ -631,9 +647,11 @@ public class CopyOnWriteArrayList<E>
         try {
             Object[] current = getArray();
             int len = current.length;
-            if (snapshot != current) {
+            if (snapshot != current) {//代表调用进来的时候已经被修改了
                 // Optimize for lost race to another addXXX operation
+                // 针对add竞争来做的优化，尽量少得来比较
                 int common = Math.min(snapshot.length, len);
+                //如果 0-common没有找到并且common-len没有找到，则直接可以add
                 for (int i = 0; i < common; i++)
                     if (current[i] != snapshot[i] && eq(e, current[i]))
                         return false;
@@ -694,6 +712,7 @@ public class CopyOnWriteArrayList<E>
             int len = elements.length;
             if (len != 0) {
                 // temp array holds those elements we know we want to keep
+                // 临时数组包含我们所有要保留的数据
                 int newlen = 0;
                 Object[] temp = new Object[len];
                 for (int i = 0; i < len; ++i) {
@@ -737,6 +756,7 @@ public class CopyOnWriteArrayList<E>
             int len = elements.length;
             if (len != 0) {
                 // temp array holds those elements we know we want to keep
+                // 临时数组包含我们所有要保留的数据
                 int newlen = 0;
                 Object[] temp = new Object[len];
                 for (int i = 0; i < len; ++i) {
@@ -777,12 +797,14 @@ public class CopyOnWriteArrayList<E>
             int len = elements.length;
             int added = 0;
             // uniquify and compact elements in cs
+            // 此处将数组的元素挨个判断是否包含在旧数组中，如果不包含则记录在原始数组中并记录一个索引戳。
             for (int i = 0; i < cs.length; ++i) {
                 Object e = cs[i];
                 if (indexOf(e, elements, 0, len) < 0 &&
                     indexOf(e, cs, 0, added) < 0)
                     cs[added++] = e;
             }
+            // 这里直接将原始的索引戳与历史数据合并成一个数组
             if (added > 0) {
                 Object[] newElements = Arrays.copyOf(elements, len + added);
                 System.arraycopy(cs, 0, newElements, len, added);
