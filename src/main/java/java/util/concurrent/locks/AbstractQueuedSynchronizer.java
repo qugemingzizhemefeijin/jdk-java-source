@@ -1252,7 +1252,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     }
 
     /**
-     * 如果对于当前（正调用的）线程，同步是以独占方式进行的，则返回 true。
+     * 如果对于当前（正调用的）线程，同步是以独占方式进行的，则返回 true。在排它模式下，状态是否被占用<br>
      * 此方法是在每次调用非等待 AbstractQueuedSynchronizer.conditionObject 方法时调用的。（等待方法则调用 release(int)。）
      *
      * <p>默认实现将抛出 UnsupportedOperationException。此方法只是 AbstractQueuedSynchronizer.conditionObject 方法内进行内部调用，因此，如果不使用条件，则不需要定义它。
@@ -2080,7 +2080,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
          *         returns {@code false}
          */
         public final void signal() {
-            //健康检查，由Lock自己实现，比如ReentrantLock，就是检查当前线程是否是拥有锁的线程
+            //由Lock自己实现，比如ReentrantLock，如果当前锁未被占用，则抛出异常
             if (!isHeldExclusively())
                 throw new IllegalMonitorStateException();
             //唤醒等待队列中的第一个节点
@@ -2098,7 +2098,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
          *         returns {@code false}
          */
         public final void signalAll() {
-            //健康检查，由Lock自己实现，比如ReentrantLock，就是检查当前线程是否是拥有锁的线程
+            //由Lock自己实现，比如ReentrantLock，如果当前锁未被占用，则抛出异常
             if (!isHeldExclusively())
                 throw new IllegalMonitorStateException();
             //唤醒等待队列中的第一个节点

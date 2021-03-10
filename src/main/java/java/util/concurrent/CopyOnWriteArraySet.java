@@ -93,6 +93,7 @@ import java.util.function.Consumer;
  * @author Doug Lea
  * @param <E> the type of elements held in this collection
  */
+// 其实是通过CopyOnWriteArrayList来实现的，调用CopyOnWriteArrayList 的 addAllAbsent方法来实现去重逻辑（要是有Map来实现可能更好点）
 public class CopyOnWriteArraySet<E> extends AbstractSet<E>
         implements java.io.Serializable {
     private static final long serialVersionUID = 5457747651344034263L;
