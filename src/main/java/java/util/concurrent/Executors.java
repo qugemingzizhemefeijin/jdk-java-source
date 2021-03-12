@@ -498,7 +498,7 @@ public class Executors {
     // Non-public classes supporting the public methods
 
     /**
-     * A callable that runs given task and returns given result
+     * 运行指定任务并返回指定结果的可调用对象
      */
     static final class RunnableAdapter<T> implements Callable<T> {
         final Runnable task;

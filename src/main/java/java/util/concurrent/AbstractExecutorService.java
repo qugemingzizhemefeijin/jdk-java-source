@@ -71,11 +71,10 @@ import java.util.*;
 public abstract class AbstractExecutorService implements ExecutorService {
 
     /**
-     * Returns a {@code RunnableFuture} for the given runnable and default
-     * value.
+     * 返回一个 {@code RunnableFuture} 指定返回值的对象
      *
-     * @param runnable the runnable task being wrapped
-     * @param value the default value for the returned future
+     * @param runnable 包装的任务对象
+     * @param value 返回期望的默认值
      * @param <T> the type of the given value
      * @return a {@code RunnableFuture} which, when run, will run the
      * underlying runnable and which, as a {@code Future}, will yield
@@ -88,9 +87,9 @@ public abstract class AbstractExecutorService implements ExecutorService {
     }
 
     /**
-     * Returns a {@code RunnableFuture} for the given callable task.
+     * 返回一个 {@code RunnableFuture} 可调用的对象
      *
-     * @param callable the callable task being wrapped
+     * @param callable 被包装的可调用的任务
      * @param <T> the type of the callable's result
      * @return a {@code RunnableFuture} which, when run, will call the
      * underlying callable and which, as a {@code Future}, will yield
@@ -103,34 +102,40 @@ public abstract class AbstractExecutorService implements ExecutorService {
     }
 
     /**
+     * 包装一个返回值是null的Future对象，这个相当于可以主动让主线程等待线程池任务执行完毕后解锁线程使用
      * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      */
     public Future<?> submit(Runnable task) {
         if (task == null) throw new NullPointerException();
         RunnableFuture<Void> ftask = newTaskFor(task, null);
+        //将任务提交到线程池
         execute(ftask);
         return ftask;
     }
 
     /**
+     * 包装一个返回值是result的Future对象
      * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      */
     public <T> Future<T> submit(Runnable task, T result) {
         if (task == null) throw new NullPointerException();
         RunnableFuture<T> ftask = newTaskFor(task, result);
+        //将任务提交到线程池
         execute(ftask);
         return ftask;
     }
 
     /**
+     * 包装一个任务，返回Future对象
      * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      */
     public <T> Future<T> submit(Callable<T> task) {
         if (task == null) throw new NullPointerException();
         RunnableFuture<T> ftask = newTaskFor(task);
+        //将任务提交到线程池
         execute(ftask);
         return ftask;
     }
