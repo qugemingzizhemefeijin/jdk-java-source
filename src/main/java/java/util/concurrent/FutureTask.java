@@ -37,7 +37,7 @@ package java.util.concurrent;
 import java.util.concurrent.locks.LockSupport;
 
 /**
- * 可取消的异步调用对象
+ * 可取消的异步调用对象G
  * A cancellable asynchronous computation.  This class provides a base
  * implementation of {@link Future}, with methods to start and cancel
  * a computation, query to see if the computation is complete, and

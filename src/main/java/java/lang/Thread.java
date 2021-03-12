@@ -153,19 +153,19 @@ class Thread implements Runnable {
     /* Whether or not to single_step this thread. */
     private boolean     single_step;
 
-    /* Whether or not the thread is a daemon thread. */
+    /* 该线程是否是守护线程. */
     private boolean     daemon = false;
 
     /* JVM state */
     private boolean     stillborn = false;
 
-    /* What will be run. */
+    /* 该线程将要运行的Runnable对象，可以为空，实际都是通过线程的run方法来调用的，所以还可以直接重写run方法 */
     private Runnable target;
 
-    /* The group of this thread */
+    /* 这个线程的所属组，开发多线程时，可以用ThreadGroup关键字创建一个线程组来方便管理一系列的子线程，线程组可以统一的设置线程的某些属性。 */
     private ThreadGroup group;
 
-    /* The context ClassLoader for this thread */
+    /* 此线程维护的的ClassLoader */
     private ClassLoader contextClassLoader;
 
     /* The inherited AccessControlContext of this thread */
@@ -177,13 +177,12 @@ class Thread implements Runnable {
         return threadInitNumber++;
     }
 
-    /* ThreadLocal values pertaining to this thread. This map is maintained
-     * by the ThreadLocal class. */
+    /* 当前线程的ThreadLocalMap，主要存储该线程自身的ThreadLocal. */
     ThreadLocal.ThreadLocalMap threadLocals = null;
 
     /*
-     * InheritableThreadLocal values pertaining to this thread. This map is
-     * maintained by the InheritableThreadLocal class.
+     * InheritableThreadLocal，自父线程集成而来的ThreadLocalMap.
+     * 主要用于父子线程间ThreadLocal变量的传递。
      */
     ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;
 
@@ -200,20 +199,18 @@ class Thread implements Runnable {
     private long nativeParkEventPointer;
 
     /*
-     * Thread ID
+     * 当前的线程ID号
      */
     private long tid;
 
-    /* For generating thread ID */
+    /* 用于生成线程ID */
     private static long threadSeqNumber;
 
-    /* Java thread status for tools,
-     * initialized to indicate thread 'not yet started'
+    /* 当前java的线程状态，初始化为NEW,
      */
-
     private volatile int threadStatus = 0;
 
-
+    //下一个ID
     private static synchronized long nextThreadID() {
         return ++threadSeqNumber;
     }
@@ -257,7 +254,7 @@ class Thread implements Runnable {
     public final static int MAX_PRIORITY = 10;
 
     /**
-     * Returns a reference to the currently executing thread object.
+     * 返回当前正在执行程序中的线程对象引用
      *
      * @return  the currently executing thread.
      */
@@ -370,6 +367,7 @@ class Thread implements Runnable {
 
         Thread parent = currentThread();
         SecurityManager security = System.getSecurityManager();
+        //线程组是不可能为空的
         if (g == null) {
             /* Determine if it's an applet or not */
 
@@ -402,8 +400,11 @@ class Thread implements Runnable {
         g.addUnstarted();
 
         this.group = g;
+        //默认继承父线程的守护类型
         this.daemon = parent.isDaemon();
+        //默认继承父线程的优先级
         this.priority = parent.getPriority();
+        //从父线程中获取ClassLoader对象并保存到contextClassLoader中
         if (security == null || isCCLOverridden(parent.getClass()))
             this.contextClassLoader = parent.getContextClassLoader();
         else
@@ -412,13 +413,14 @@ class Thread implements Runnable {
                 acc != null ? acc : AccessController.getContext();
         this.target = target;
         setPriority(priority);
+        //继承父线程的线程本地变量
         if (parent.inheritableThreadLocals != null)
             this.inheritableThreadLocals =
                 ThreadLocal.createInheritedMap(parent.inheritableThreadLocals);
         /* Stash the specified stack size in case the VM cares */
         this.stackSize = stackSize;
 
-        /* Set thread ID */
+        /* 设置线程号 */
         tid = nextThreadID();
     }
 
@@ -700,6 +702,8 @@ class Thread implements Runnable {
          * to this method in the future may have to also be added to the VM.
          *
          * A zero status value corresponds to state "NEW".
+         *
+         * 只有初始状态的线程才能允许调用start方法
          */
         if (threadStatus != 0)
             throw new IllegalThreadStateException();
@@ -707,14 +711,16 @@ class Thread implements Runnable {
         /* Notify the group that this thread is about to be started
          * so that it can be added to the group's list of threads
          * and the group's unstarted count can be decremented. */
+        //将自己加入到线程组中
         group.add(this);
 
         boolean started = false;
         try {
-            start0();
+            start0();//native层最终会调用run方法
             started = true;
         } finally {
             try {
+                //如果调用失败则从线程组中移除
                 if (!started) {
                     group.threadStartFailed(this);
                 }
@@ -991,8 +997,7 @@ class Thread implements Runnable {
     }
 
     /**
-     * Tests if this thread is alive. A thread is alive if it has
-     * been started and has not yet died.
+     * 测试此线程是否仍然存在。如果一个线程已经启动并且尚未死亡，则该线程是活动的。
      *
      * @return  <code>true</code> if this thread is alive;
      *          <code>false</code> otherwise.
@@ -1215,6 +1220,12 @@ class Thread implements Runnable {
     public native int countStackFrames();
 
     /**
+     *
+     * join方法必须在线程start方法调用之后调用才有意义。这个也很容易理解：如果一个线程都没有start，那它也就无法同步了。
+     *
+     * join() 和 sleep() 一样，可以被中断（被中断时，会抛出 InterrupptedException 异常）；
+     * 不同的是，join() 内部调用了 wait()，会出让锁，而 sleep() 会一直保持锁。
+     *
      * Waits at most {@code millis} milliseconds for this thread to
      * die. A timeout of {@code 0} means to wait forever.
      *
@@ -1244,11 +1255,14 @@ class Thread implements Runnable {
             throw new IllegalArgumentException("timeout value is negative");
         }
 
+        //等待指定时间，如果完成调用，则当前等待的线程解锁继续执行下去
         if (millis == 0) {
+            //是为了防止子线程伪唤醒(spurious wakeup)，只要子线程没有TERMINATED的，父线程就需要继续等下去。
             while (isAlive()) {
                 wait(0);
             }
         } else {
+            //是为了防止子线程伪唤醒(spurious wakeup)，只要子线程没有TERMINATED的，父线程就需要继续等下去。
             while (isAlive()) {
                 long delay = millis - now;
                 if (delay <= 0) {
