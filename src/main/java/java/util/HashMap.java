@@ -945,8 +945,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
     }
 
     /**
-     * Returns <tt>true</tt> if this map maps one or more keys to the
-     * specified value.
+     * 判断指定的Value值都是在Map中。其实就是循环整个数组桶，然后再循环链表。
      *
      * @param value value whose presence in this map is to be tested
      * @return <tt>true</tt> if this map maps one or more keys to the
@@ -982,6 +981,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * @return a set view of the keys contained in this map
      */
     public Set<K> keySet() {
+        //一个Map维护一个KeySet视图
         Set<K> ks = keySet;
         if (ks == null) {
             ks = new KeySet();
@@ -1033,6 +1033,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * @return a view of the values contained in this map
      */
     public Collection<V> values() {
+        //一个Map维护一个values视图
         Collection<V> vs = values;
         if (vs == null) {
             vs = new Values();
