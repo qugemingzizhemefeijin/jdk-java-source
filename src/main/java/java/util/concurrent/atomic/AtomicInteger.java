@@ -52,6 +52,7 @@ import sun.misc.Unsafe;
  * @author Doug Lea
 */
 public class AtomicInteger extends Number implements java.io.Serializable {
+
     private static final long serialVersionUID = 6214790243416807050L;
 
     // setup to use Unsafe.compareAndSwapInt for updates
@@ -60,8 +61,7 @@ public class AtomicInteger extends Number implements java.io.Serializable {
 
     static {
         try {
-            valueOffset = unsafe.objectFieldOffset
-                (AtomicInteger.class.getDeclaredField("value"));
+            valueOffset = unsafe.objectFieldOffset(AtomicInteger.class.getDeclaredField("value"));
         } catch (Exception ex) { throw new Error(ex); }
     }
 

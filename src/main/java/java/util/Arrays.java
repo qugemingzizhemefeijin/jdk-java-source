@@ -1500,15 +1500,16 @@ public class Arrays {
      * @throws ArrayIndexOutOfBoundsException if {@code fromIndex < 0} or
      *         {@code toIndex > a.length}
      */
-    public static <T> void sort(T[] a, int fromIndex, int toIndex,
-                                Comparator<? super T> c) {
+    public static <T> void sort(T[] a, int fromIndex, int toIndex, Comparator<? super T> c) {
         if (c == null) {
             sort(a, fromIndex, toIndex);
         } else {
             rangeCheck(a.length, fromIndex, toIndex);
+            // 旧版本使用的是归并排序
             if (LegacyMergeSort.userRequested)
                 legacyMergeSort(a, fromIndex, toIndex, c);
             else
+                // 基本都会走到这里，排序的过程中还会因为元素的个数是否大于32，而选择分段排序和二分插入排序
                 TimSort.sort(a, fromIndex, toIndex, c, null, 0, 0);
         }
     }

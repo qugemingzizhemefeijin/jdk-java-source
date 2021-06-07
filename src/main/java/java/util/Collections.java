@@ -120,6 +120,11 @@ public class Collections {
      * not be reordered as a result of the sort.
      *
      * <p>The specified list must be modifiable, but need not be resizable.
+     * <br><br>
+     * <p>集合排序，最终使用的方法：Arrays.sort((E[]) elementData, 0, size, c);
+     * <p>这一部分排序逻辑包括了，旧版的归并排序 legacyMergeSort 和 TimSort 排序。
+     * <p>但因为开关的作用，LegacyMergeSort.userRequested = false，基本都是走到 TimSort 排序 。
+     * <p>同时在排序的过程中还会因为元素的个数是否大于32，而选择分段排序和二分插入排序。
      *
      * @implNote
      * This implementation defers to the {@link List#sort(Comparator)}
@@ -209,6 +214,8 @@ public class Collections {
      */
     public static <T>
     int binarySearch(List<? extends Comparable<? super T>> list, T key) {
+        // 因为 ArrayList 有实现 RandomAccess，但是 LinkedList 并没有实现这个接口。
+        // 同时还有元素数量阈值的校验 BINARYSEARCH_THRESHOLD = 5000，小于这个范围的都采用 indexedBinarySearch 进行查找。
         if (list instanceof RandomAccess || list.size()<BINARYSEARCH_THRESHOLD)
             return Collections.indexedBinarySearch(list, key);
         else
@@ -413,6 +420,8 @@ public class Collections {
      * it, and dumps the shuffled array back into the list.  This avoids the
      * quadratic behavior that would result from shuffling a "sequential
      * access" list in place.
+     *
+     * <p>洗牌算法，其实就是将 List 集合中的元素进行打乱，一般可以用在抽奖、摇号、洗牌等各个场景中。
      *
      * @param  list the list to be shuffled.
      * @throws UnsupportedOperationException if the specified list or
@@ -761,6 +770,21 @@ public class Collections {
      * and finally it is invoked on the entire list.  For a more complete
      * description of both algorithms, see Section 2.3 of Jon Bentley's
      * <i>Programming Pearls</i> (Addison-Wesley, 1986).
+     *
+     * <p>旋转算法，可以把ArrayList或者Linkedlist，从指定的某个位置开始，进行正旋或者逆旋操作。有点像把集合理解成圆盘，把要的元素转到自己这，其他的元素顺序跟随。
+     *
+     * <pre>
+     * List<String> list = new ArrayList<String>();
+     * list.add("7");
+     * list.add("4");
+     * list.add("8");
+     * list.add("3");
+     * list.add("9");
+     * Collections.rotate(list, 2);
+     * System.out.println(list);
+     *
+     * //[3, 9, 7, 4, 8]
+     * </pre>
      *
      * @param list the list to be rotated.
      * @param distance the distance to rotate the list.  There are no
