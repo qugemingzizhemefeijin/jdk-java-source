@@ -55,16 +55,45 @@ package java.lang.ref;
  * reference will not be cleared.  Thus a sophisticated cache can, for example,
  * prevent its most recently used entries from being discarded by keeping
  * strong referents to those entries, leaving the remaining entries to be
- * discarded at the discretion of the garbage collector.
+ * discarded at the discretion of the garbage collector.<br>
+ *
+ * <pre>
+ *   //在源码 hotspot/src/share/vm/memory/referenceProcessor.hpp 中会根据传入的 always_clear 来选择用什么策略清理软引用
+ *   ReferencePolicy* setup_policy(bool always_clear) {
+ *     _current_soft_ref_policy = always_clear ?
+ *       _always_clear_soft_ref_policy : _default_soft_ref_policy;
+ *     _current_soft_ref_policy->setup();   // snapshot the policy threshold
+ *     return _current_soft_ref_policy;
+ *   }
+ * </pre>
  *
  * @author   Mark Reinhold
  * @since    1.2
  */
-
 public class SoftReference<T> extends Reference<T> {
 
     /**
-     * Timestamp clock, updated by the garbage collector
+     * 时间戳时钟，由垃圾收集器更新（此戳的功能就是用于更新软引用的timestamp，用于软引用对象的referent置空）<br>
+     * 在JVM源码 hotspot/src/share/vm/memory/referenceProcessor.cpp 初始化的时候会调用<br>
+     * java_lang_ref_SoftReference::set_clock(_soft_ref_timestamp_clock); 来更新此戳（此戳单位是毫秒）<br>
+     * process_discovered_references 会执行软引用的查找，并将到期的软引用的 referent 置空<br>
+     * 影响软引用的回收策略未 JVM参数 SoftRefLRUPolicyMSPerMB ，默认值1000，字面意思是 每MB的软引用存活时间为1秒，当 SoftRefLRUPolicyMSPerMB = 0的时候，则软引用经历一次GC即被回收。<br>
+     * <br>
+     * 回收策略有两种，代码在 hotspot/src/share/vm/memory/referencePolicy.cpp ：<br>
+     * <pre>
+     * LRUCurrentHeapPolicy 和 LRUMaxHeapPolicy策略
+     *
+     * _default_soft_ref_policy      = new COMPILER2_PRESENT(LRUMaxHeapPolicy())  这个是Server端策略
+     *                                  NOT_COMPILER2(LRUCurrentHeapPolicy());     这个是Client端策略
+     *
+     * LRUCurrentHeapPolicy :
+     *     上次GC后空闲堆内存或者说当前可用的堆内存 / M * SoftRefLRUPolicyMSPerMB 最后算出软引用的最终存活时间
+     * LRUMaxHeapPolicy策略 :
+     *     (最大堆内存 - 上次GC后已使用的堆内存) / M * SoftRefLRUPolicyMSPerMB   最后算出软引用的最终存活时间
+     *
+     * 按照策略来看最终Server端会让软引用多存活一点时间。
+     *
+     * </pre>
      */
     static private long clock;
 
@@ -72,6 +101,8 @@ public class SoftReference<T> extends Reference<T> {
      * Timestamp updated by each invocation of the get method.  The VM may use
      * this field when selecting soft references to be cleared, but it is not
      * required to do so.
+     *
+     * 每次调用 get 方法都会更新时间戳。在选择要清除的软引用时，VM可以使用此字段，但不需要执行此操作
      */
     private long timestamp;
 

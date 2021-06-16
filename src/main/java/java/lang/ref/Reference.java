@@ -38,7 +38,6 @@ import sun.misc.SharedSecrets;
  * @author   Mark Reinhold
  * @since    1.2
  */
-
 public abstract class Reference<T> {
 
     /* A Reference instance is in one of four possible internal states:
@@ -89,8 +88,10 @@ public abstract class Reference<T> {
      * field is also used for linking Reference objects in the pending list.
      */
 
+    //引用的对象
     private T referent;         /* Treated specially by GC */
 
+    //回收队列，由使用者在Reference的构造函数中指定
     volatile ReferenceQueue<? super T> queue;
 
     /* When active:   NULL
@@ -98,6 +99,7 @@ public abstract class Reference<T> {
      *    Enqueued:   next reference in queue (or this if last)
      *    Inactive:   this
      */
+    //当该引用被加入到queue中的时候，该字段被设置为queue中的下一个元素，以形成链表结构
     @SuppressWarnings("rawtypes")
     Reference next;
 
@@ -105,6 +107,7 @@ public abstract class Reference<T> {
      *     pending:   next element in the pending list (or null if last)
      *   otherwise:   NULL
      */
+    //在GC时，HotSpot底层会维护一个叫DiscoveredList的链表，存放的是Reference对象，discovered字段指向的就是链表中的下一个元素，由HotSpot设置
     transient private Reference<T> discovered;  /* used by VM */
 
 
@@ -113,6 +116,7 @@ public abstract class Reference<T> {
      * therefore critical that any code holding this lock complete as quickly
      * as possible, allocate no new objects, and avoid calling user code.
      */
+    //进行线程同步的锁对象
     static private class Lock { }
     private static Lock lock = new Lock();
 
@@ -122,9 +126,11 @@ public abstract class Reference<T> {
      * them.  This list is protected by the above lock object. The
      * list uses the discovered field to link its elements.
      */
+    //等待加入queue的Reference对象，在GC时由JVM设置，会有一个java层的线程(ReferenceHandler)源源不断的从pending中提取元素加入到queue
     private static Reference<Object> pending = null;
 
     /* High-priority thread to enqueue pending References
+     * 引用对象生命周期 https://img2020.cnblogs.com/blog/1236123/202004/1236123-20200409200531032-1604663906.png
      */
     private static class ReferenceHandler extends Thread {
 
@@ -180,13 +186,17 @@ public abstract class Reference<T> {
                     r = pending;
                     // 'instanceof' might throw OutOfMemoryError sometimes
                     // so do this before un-linking 'r' from the 'pending' chain...
+                    // 如果是Cleaner对象，则记录下来，下面做特殊处理
                     c = r instanceof Cleaner ? (Cleaner) r : null;
                     // unlink 'r' from 'pending' chain
+                    // 指向PendingList的下一个对象
                     pending = r.discovered;
+                    // 从pending中取消链条
                     r.discovered = null;
                 } else {
                     // The waiting on the lock may cause an OutOfMemoryError
                     // because it may try to allocate exception objects.
+                    // 如果pending为null就先等待，当有对象加入到PendingList中时，jvm会执行notify
                     if (waitForNotify) {
                         lock.wait();
                     }
@@ -208,11 +218,13 @@ public abstract class Reference<T> {
         }
 
         // Fast path for cleaners
+        // 如果时Cleaner对象，则调用clean方法进行资源回收
         if (c != null) {
             c.clean();
             return true;
         }
 
+        // 将Reference加入到ReferenceQueue，开发者可以通过从ReferenceQueue中poll元素感知到对象被回收的事件
         ReferenceQueue<? super Object> q = r.queue;
         if (q != ReferenceQueue.NULL) q.enqueue(r);
         return true;

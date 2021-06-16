@@ -27,7 +27,9 @@ package java.lang.ref;
 
 /**
  * Reference queues, to which registered reference objects are appended by the
- * garbage collector after the appropriate reachability changes are detected.
+ * garbage collector after the appropriate reachability changes are detected.<br>
+ * <br>
+ * ReferenceQueue是引用队列，垃圾收集器在检测到适当的可达性更改后将已注册的引用对象追加到该队列。
  *
  * @author   Mark Reinhold
  * @since    1.2
@@ -40,18 +42,24 @@ public class ReferenceQueue<T> {
      */
     public ReferenceQueue() { }
 
+    // 内部类Null类继承自ReferenceQueue，覆盖了enqueue方法返回false
     private static class Null<S> extends ReferenceQueue<S> {
         boolean enqueue(Reference<? extends S> r) {
             return false;
         }
     }
 
+    // 默认的Reference都会使用这个NULL的队列，此队列不会存放任何要被回收的引用
     static ReferenceQueue<Object> NULL = new Null<>();
+    // 这个队列在第一次存放到指定的queue之后，会将引用类型的队列指向此，防止再次被放入到队列中
     static ReferenceQueue<Object> ENQUEUED = new Null<>();
 
+    // 静态内部类，作为锁对象
     static private class Lock { };
     private Lock lock = new Lock();
+    // 引用链表的头节点，每次丢一个，则将头设置为最后加入到队列的Reference对象
     private volatile Reference<? extends T> head = null;
+    // 引用队列长度，入队则增加1，出队则减少1
     private long queueLength = 0;
 
     boolean enqueue(Reference<? extends T> r) { /* Called only by Reference class */
