@@ -36,6 +36,7 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
                                                           class */
 
     private static ReferenceQueue<Object> queue = new ReferenceQueue<>();
+    //双向链表的头
     private static Finalizer unfinalized = null;
     private static final Object lock = new Object();
 
@@ -43,35 +44,52 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
         next = null,
         prev = null;
 
+    /**
+     * 设置为已执行过Finalize方法
+     * @return boolean
+     */
     private boolean hasBeenFinalized() {
         return (next == this);
     }
 
+    /**
+     * 在首次new出Finalizer的时候会将其添加到队列的头部，并且初始化next和prev的值
+     */
     private void add() {
         synchronized (lock) {
             if (unfinalized != null) {
+                //当前值的下一个指向原来的头对象
                 this.next = unfinalized;
+                //上一个指向自己
                 unfinalized.prev = this;
             }
+            //将头部设置为自己
             unfinalized = this;
         }
     }
 
+    /**
+     * 将自己从链中移除
+     */
     private void remove() {
         synchronized (lock) {
+            //如果头部是自己的话，需要将头部重置一下
             if (unfinalized == this) {
+                //有下一个对象，则将头部指向下一个对象，没有下一个对象则指向上一个对象（即为空）
                 if (this.next != null) {
                     unfinalized = this.next;
                 } else {
                     unfinalized = this.prev;
                 }
             }
+            //将自己从链条中移走
             if (this.next != null) {
                 this.next.prev = this.prev;
             }
             if (this.prev != null) {
                 this.prev.next = this.next;
             }
+            //全部指向自己，表示完成移除
             this.next = this;   /* Indicates that this has been finalized */
             this.prev = this;
         }
@@ -83,18 +101,23 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
     }
 
     /* Invoked by VM */
+    // 静态的register方法，注意它的注释“被vm调用”，所以jvm是通过调用这个方法将对象封装为Finalizer对象的
     static void register(Object finalizee) {
         new Finalizer(finalizee);
     }
 
     private void runFinalizer(JavaLangAccess jla) {
         synchronized (this) {
+            //如果已经执行过了，则不要再执行了
             if (hasBeenFinalized()) return;
+            //将自己从Finalizer对象链里剥离
             remove();
         }
         try {
+            //获取到真正的对象
             Object finalizee = this.get();
             if (finalizee != null && !(finalizee instanceof java.lang.Enum)) {
+                //执行Finalize方法
                 jla.invokeFinalize(finalizee);
 
                 /* Clear stack slot containing this variable, to decrease
@@ -194,6 +217,8 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
 
             // Finalizer thread starts before System.initializeSystemClass
             // is called.  Wait until JavaLangAccess is available
+
+            // 这个是等待JVM初始化完成
             while (!VM.isBooted()) {
                 // delay until VM completes initialization
                 try {
@@ -206,6 +231,7 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
             running = true;
             for (;;) {
                 try {
+                    //从队列中移除Final引用对象并执行Finalize方法
                     Finalizer f = (Finalizer)queue.remove();
                     f.runFinalizer(jla);
                 } catch (InterruptedException x) {

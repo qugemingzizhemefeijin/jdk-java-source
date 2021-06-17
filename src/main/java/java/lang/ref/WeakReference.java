@@ -39,12 +39,16 @@ package java.lang.ref;
  * references.  At the same time it will declare all of the formerly
  * weakly-reachable objects to be finalizable.  At the same time or at some
  * later time it will enqueue those newly-cleared weak references that are
- * registered with reference queues.
+ * registered with reference queues.<br>
+ * <br>
+ * 弱引用的强度比软引用更弱一些，当垃圾收集器工作时，无论当前内存是否足够，都会回收掉只被弱引用关联的对象。<br>
+ * 它一般用于维护一种非强制的映射关系，如果获取的对象还在，就是用它，否则就重新实例化，因此，很多缓存框架均基于它来实现。<br>
  *
  * @author   Mark Reinhold
  * @since    1.2
+ * @see java.util.WeakHashMap
+ * @see java.lang.ThreadLocal
  */
-
 public class WeakReference<T> extends Reference<T> {
 
     /**

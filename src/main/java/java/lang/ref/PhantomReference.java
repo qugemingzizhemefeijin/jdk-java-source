@@ -44,12 +44,16 @@ package java.lang.ref;
  * <p> Unlike soft and weak references, phantom references are not
  * automatically cleared by the garbage collector as they are enqueued.  An
  * object that is reachable via phantom references will remain so until all
- * such references are cleared or themselves become unreachable.
+ * such references are cleared or themselves become unreachable.<br>
+ * <br>
+ * 虚引用也被称为幽灵引用，它是最弱的一种引用关系。一个对象是否有虚引用的存在，完全不会对其生存时间构成影响，也无法通过虚引用来取得一个对象实例。<br>
+ * 也就是说，通过其 get() 方法得到的对象永远是null。<br>
+ * <br>
+ * 注意：虚引用不会被垃圾收集主动解除 referent 引用关系，会导致OOM，要么引用无法被访问，要么手动进行clear。上面的英文注释也说的很明白。<br>
  *
  * @author   Mark Reinhold
  * @since    1.2
  */
-
 public class PhantomReference<T> extends Reference<T> {
 
     /**

@@ -1851,9 +1851,25 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         size = 0;
     }
 
+    // 下面三个方法是专门提供给LinkedHashMap使用的
     // Callbacks to allow LinkedHashMap post-actions
+
+    /**
+     * 当节点被访问之后调用
+     * @param p Node
+     */
     void afterNodeAccess(Node<K,V> p) { }
+
+    /**
+     * 当节点被插入之后调用
+     * @param evict 决定是否移除最老的节点
+     */
     void afterNodeInsertion(boolean evict) { }
+
+    /**
+     * 当节点被删除之后调用
+     * @param p Node
+     */
     void afterNodeRemoval(Node<K,V> p) { }
 
     // Called only from writeObject, to ensure compatible ordering.

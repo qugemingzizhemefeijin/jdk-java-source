@@ -160,10 +160,7 @@ import java.io.IOException;
  * @see     Hashtable
  * @since   1.4
  */
-public class LinkedHashMap<K,V>
-    extends HashMap<K,V>
-    implements Map<K,V>
-{
+public class LinkedHashMap<K,V> extends HashMap<K,V> implements Map<K,V> {
 
     /*
      * Implementation note.  A previous version of this class was
@@ -190,6 +187,7 @@ public class LinkedHashMap<K,V>
      * HashMap.Node subclass for normal LinkedHashMap entries.
      */
     static class Entry<K,V> extends HashMap.Node<K,V> {
+        // 这里比HashMap.Node多维护了before节点和after节点，其实也就是next节点。。这个Entry是一个双向链表
         Entry<K,V> before, after;
         Entry(int hash, K key, V value, Node<K,V> next) {
             super(hash, key, value, next);
@@ -199,18 +197,20 @@ public class LinkedHashMap<K,V>
     private static final long serialVersionUID = 3801124242820219131L;
 
     /**
-     * The head (eldest) of the doubly linked list.
+     * 双向链表的头部
      */
     transient LinkedHashMap.Entry<K,V> head;
 
     /**
-     * The tail (youngest) of the doubly linked list.
+     * 双向链表的尾部
      */
     transient LinkedHashMap.Entry<K,V> tail;
 
     /**
      * The iteration ordering method for this linked hash map: <tt>true</tt>
      * for access-order, <tt>false</tt> for insertion-order.
+     *
+     * <p> true按照访问排序，false按照插入排序
      *
      * @serial
      */
@@ -248,6 +248,7 @@ public class LinkedHashMap<K,V>
     // overrides of HashMap hook methods
 
     void reinitialize() {
+        // 重新初始化
         super.reinitialize();
         head = tail = null;
     }
@@ -493,6 +494,8 @@ public class LinkedHashMap<K,V>
      *
      * <p>This implementation merely returns <tt>false</tt> (so that this
      * map acts like a normal map - the eldest element is never removed).
+     *
+     * <p> 用于判定是否移除最老的节点，默认的LinkedHashMap是不会移除的
      *
      * @param    eldest The least recently inserted entry in the map, or if
      *           this is an access-ordered map, the least recently accessed

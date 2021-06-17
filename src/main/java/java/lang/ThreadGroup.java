@@ -55,18 +55,53 @@ import sun.misc.VM;
  */
 public
 class ThreadGroup implements Thread.UncaughtExceptionHandler {
+
+    /**
+     * 线程组的线程组，final 表明 线程组 不可以随便变更
+     */
     private final ThreadGroup parent;
+
+    /**
+     * 名字
+     */
     String name;
+
+    /**
+     * 这个线程组 的元素 例如 线程 线程组的最大优先级，具体实现是 当线程或者线程组自身设定优先级的时候，总是取 自己父线程组的优先级和要设定的优先级的最小值
+     */
     int maxPriority;
+
+    /**
+     * 是否已被销毁
+     */
     boolean destroyed;
+
+    /**
+     * 当守护进程线程组的最后一个线程停止或最后一个线程组被销毁时，将自动销毁该线程组（是否守护的标志）
+     */
     boolean daemon;
     boolean vmAllowSuspension;
 
     int nUnstartedThreads = 0;
+
+    /**
+     * 这个线程组里面的线程数量
+     */
     int nthreads;
+
+    /**
+     * 线程数组持有线程的引用
+     */
     Thread threads[];
 
+    /**
+     * 这个线程组里面的线程组数量
+     */
     int ngroups;
+
+    /**
+     * 线程组数组持有线程组的引用
+     */
     ThreadGroup groups[];
 
     /**
@@ -327,6 +362,8 @@ class ThreadGroup implements Thread.UncaughtExceptionHandler {
      * system threads. This method is intended primarily for debugging
      * and monitoring purposes.
      *
+     * <p> 返回此线程组及其子线程组中活动线程数量的估计值。递归地遍历此线程组中的所有子组。 如果当前线程组已经destroyed，返回0
+     *
      * @return  an estimate of the number of active threads in this thread
      *          group and in any other thread group that has this thread
      *          group as an ancestor
@@ -401,6 +438,8 @@ class ThreadGroup implements Thread.UncaughtExceptionHandler {
      *
      * <p> Due to the inherent race condition in this method, it is recommended
      * that the method only be used for debugging and monitoring purposes.
+     *
+     * <p> 将线程组的中线程 活动线程放入list[]里面 会自动扩大这个数组，如果{@code recurse}为{@code true}，则此方法递归枚举此线程组的所有子组，并引用这些子组中的每个活动线程
      *
      * @param  list
      *         an array into which to put the list of threads

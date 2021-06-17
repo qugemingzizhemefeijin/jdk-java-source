@@ -75,6 +75,8 @@ import java.io.InvalidObjectException;
  * <a href="{@docRoot}/../technotes/guides/collections/index.html">
  * Java Collections Framework</a>.
  *
+ * <p> 是通过HashMap来实现的，内部的map的value值为一个固定占位对象，Key用于去重，迭代等。
+ *
  * @param <E> the type of elements maintained by this set
  *
  * @author  Josh Bloch
@@ -85,10 +87,7 @@ import java.io.InvalidObjectException;
  * @see     HashMap
  * @since   1.2
  */
-
-public class HashSet<E>
-    extends AbstractSet<E>
-    implements Set<E>, Cloneable, java.io.Serializable
+public class HashSet<E> extends AbstractSet<E> implements Set<E>, Cloneable, java.io.Serializable
 {
     static final long serialVersionUID = -5024744406713321676L;
 
@@ -145,6 +144,8 @@ public class HashSet<E>
     }
 
     /**
+     * <p>调用此构造函数将使用一个LinkedHashMap，其他的构造函数使用HashMap
+     *
      * Constructs a new, empty linked hash set.  (This package private
      * constructor is only used by LinkedHashSet.) The backing
      * HashMap instance is a LinkedHashMap with the specified initial
