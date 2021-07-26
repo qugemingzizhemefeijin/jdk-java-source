@@ -397,14 +397,19 @@ public class ThreadLocal<T> {
             Entry[] parentTable = parentMap.table;
             int len = parentTable.length;
             setThreshold(len);
+            // ThreadLocalMap 使用 Entry[] table 存储ThreadLocal
             table = new Entry[len];
 
+            // 逐一复制 parentMap 的记录
             for (int j = 0; j < len; j++) {
                 Entry e = parentTable[j];
                 if (e != null) {
                     @SuppressWarnings("unchecked")
                     ThreadLocal<Object> key = (ThreadLocal<Object>) e.get();
                     if (key != null) {
+                        // 好奇此处为何使用childValue，而不是直接赋值，
+                        // 毕竟childValue内部也是直接将e.value返回；
+                        // 个人理解，主要为了减轻阅读代码的难度
                         Object value = key.childValue(e.value);
                         Entry c = new Entry(key, value);
                         int h = key.threadLocalHashCode & (len - 1);

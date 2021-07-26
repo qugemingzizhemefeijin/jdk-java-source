@@ -40,6 +40,9 @@ import java.lang.ref.*;
  * maintained in the variable (e.g., User ID, Transaction ID) must be
  * automatically transmitted to any child threads that are created.
  *
+ *
+ * 由于ThreadLocal设计之初就是为了绑定当前线程，如果希望当前线程的ThreadLocal能够被子线程使用，实现方式就会相当困难（需要用户自己在代码中传递）。在此背景下，InheritableThreadLocal应运而生。
+ *
  * @author  Josh Bloch and Doug Lea
  * @see     ThreadLocal
  * @since   1.2
@@ -55,6 +58,9 @@ public class InheritableThreadLocal<T> extends ThreadLocal<T> {
      * This method merely returns its input argument, and should be overridden
      * if a different behavior is desired.
      *
+     * <p>
+     * 该函数在父线程创建子线程，向子线程复制InheritableThreadLocal变量时使用
+     *
      * @param parentValue the parent thread's value
      * @return the child thread's initial value
      */
@@ -65,6 +71,8 @@ public class InheritableThreadLocal<T> extends ThreadLocal<T> {
     /**
      * Get the map associated with a ThreadLocal.
      *
+     * 由于重写了getMap，操作InheritableThreadLocal时，将只影响Thread类中的inheritableThreadLocals变量，与threadLocals变量不再有关系
+     *
      * @param t the current thread
      */
     ThreadLocalMap getMap(Thread t) {
@@ -73,6 +81,8 @@ public class InheritableThreadLocal<T> extends ThreadLocal<T> {
 
     /**
      * Create the map associated with a ThreadLocal.
+     *
+     * 类似于getMap，操作InheritableThreadLocal时，将只影响Thread类中的inheritableThreadLocals变量，与threadLocals变量不再有关系
      *
      * @param t the current thread
      * @param firstValue value for the initial entry of the table.
