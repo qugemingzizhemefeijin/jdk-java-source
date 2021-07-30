@@ -457,7 +457,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
     // 修改exceptionTable时的锁
     private static final ReentrantLock exceptionTableLock;
 
-    // 保存被清楚掉的弱引用的队列
+    // 保存被清除掉的弱引用的队列
     private static final ReferenceQueue<Object> exceptionTableRefQueue;
 
     /**
