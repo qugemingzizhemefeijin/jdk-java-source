@@ -3732,6 +3732,7 @@ public class ForkJoinPool extends AbstractExecutorService {
         ForkJoinPool p;
         ForkJoinWorkerThread wt;
         Thread t = Thread.currentThread();
+        // 如果当前线程是ForkJoinWorkerThread
         if ((t instanceof ForkJoinWorkerThread) && // 如果是ForkJoinWorkerThread
             (p = (wt = (ForkJoinWorkerThread)t).pool) != null) {
             WorkQueue w = wt.workQueue;
@@ -3750,7 +3751,8 @@ public class ForkJoinPool extends AbstractExecutorService {
             }
         }
         else {
-            // 普通的JavaThread
+            // 如果是普通的Thread
+            // 不断循环直到可以终止等待
             do {} while (!blocker.isReleasable() &&
                          !blocker.block());
         }

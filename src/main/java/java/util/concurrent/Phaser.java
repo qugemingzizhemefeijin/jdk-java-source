@@ -461,32 +461,42 @@ public class Phaser {
             // 获取未到达的线程数
             int counts = (int)s;
             int unarrived = (counts == EMPTY) ? 0 : (counts & UNARRIVED_MASK);
-            if (unarrived <= 0)
+            if (unarrived <= 0) // 参数非法
                 throw new IllegalStateException(badArrive(s));
-            if (UNSAFE.compareAndSwapLong(this, stateOffset, s, s-=adjust)) {
-                if (unarrived == 1) {
+            if (UNSAFE.compareAndSwapLong(this, stateOffset, s, s-=adjust)) { // 修改state成功，修改失败则重试
+                if (unarrived == 1) { // 未到达的线程数为1，即当前线程是最后一个到达的
+                    // 获取parties
                     long n = s & PARTIES_MASK;  // base of next state
+                    // nextUnarrived就等于parties
                     int nextUnarrived = (int)n >>> PARTIES_SHIFT;
-                    if (root == this) {
-                        if (onAdvance(phase, nextUnarrived))
+                    if (root == this) { // 如果没有父节点
+                        if (onAdvance(phase, nextUnarrived)) // 需要被终止，默认实现下nextUnarrived等于0则返回true
                             n |= TERMINATION_BIT;
-                        else if (nextUnarrived == 0)
+                        else if (nextUnarrived == 0) // 原有到达的线程都注销了
                             n |= EMPTY;
                         else
                             n |= nextUnarrived;
+                        // 计算下一个phase
                         int nextPhase = (phase + 1) & MAX_PHASE;
+                        // 写入phase
                         n |= (long)nextPhase << PHASE_SHIFT;
+                        // 修改state
                         UNSAFE.compareAndSwapLong(this, stateOffset, s, n);
+                        // 唤醒之前已到达然后等待的线程
                         releaseWaiters(phase);
                     }
-                    else if (nextUnarrived == 0) { // propagate deregistration
+                    // 如果有父节点
+                    else if (nextUnarrived == 0) { // propagate deregistration 有到达的线程都注销了，从父节点注销
                         phase = parent.doArrive(ONE_DEREGISTER);
+                        // 更新state，将parties置为0
                         UNSAFE.compareAndSwapLong(this, stateOffset,
                                                   s, s | EMPTY);
                     }
                     else
+                        // nextUnarrived不等于0，有未注销的线程，通知父节点已到达
                         phase = parent.doArrive(ONE_ARRIVAL);
-                }
+                } // if结束
+                // 如果不是最后到达的线程则直接返回
                 return phase;
             }
         }
@@ -498,6 +508,7 @@ public class Phaser {
      * @param registrations number to add to both parties and
      * unarrived fields. Must be greater than zero.
      */
+    // 将parties增加指定值，返回当前的phase
     private int doRegister(int registrations) {
         // adjustment to state
         // PARTIES_SHIFT的值是16
@@ -846,13 +857,15 @@ public class Phaser {
      * negative, or the (negative) {@linkplain #getPhase() current phase}
      * if terminated
      */
+    // 无期限等待
     public int awaitAdvance(int phase) {
         final Phaser root = this.root;
+        // 获取phase
         long s = (root == this) ? state : reconcileState();
         int p = (int)(s >>> PHASE_SHIFT);
-        if (phase < 0)
+        if (phase < 0) // 被终止了，直接返回
             return phase;
-        if (p == phase)
+        if (p == phase) // 跟当前phase一致，则阻塞当前线程
             return root.internalAwaitAdvance(phase, null);
         return p;
     }
@@ -872,17 +885,20 @@ public class Phaser {
      * if terminated
      * @throws InterruptedException if thread interrupted while waiting
      */
+    // 无期限等待，如果被中断则抛出异常
     public int awaitAdvanceInterruptibly(int phase)
         throws InterruptedException {
         final Phaser root = this.root;
+        // 获取phase
         long s = (root == this) ? state : reconcileState();
         int p = (int)(s >>> PHASE_SHIFT);
-        if (phase < 0)
+        if (phase < 0) // 被终止了，直接返回
             return phase;
-        if (p == phase) {
+        if (p == phase) { // 跟当前phase一致
             QNode node = new QNode(this, phase, true, false, 0L);
+            // 阻塞当前线程
             p = root.internalAwaitAdvance(phase, node);
-            if (node.wasInterrupted)
+            if (node.wasInterrupted) // 如果被中断则抛出异常
                 throw new InterruptedException();
         }
         return p;
@@ -908,21 +924,24 @@ public class Phaser {
      * @throws InterruptedException if thread interrupted while waiting
      * @throws TimeoutException if timed out while waiting
      */
+    // 等待指定的时间，如果被中断或者等待超时则抛出异常
     public int awaitAdvanceInterruptibly(int phase,
                                          long timeout, TimeUnit unit)
         throws InterruptedException, TimeoutException {
         long nanos = unit.toNanos(timeout);
         final Phaser root = this.root;
+        // 获取phase
         long s = (root == this) ? state : reconcileState();
         int p = (int)(s >>> PHASE_SHIFT);
-        if (phase < 0)
+        if (phase < 0) // 被终止了，直接返回
             return phase;
         if (p == phase) {
             QNode node = new QNode(this, phase, true, true, nanos);
+            // 阻塞当前线程
             p = root.internalAwaitAdvance(phase, node);
-            if (node.wasInterrupted)
+            if (node.wasInterrupted) // 如果被中断则抛出异常
                 throw new InterruptedException();
-            else if (p == phase)
+            else if (p == phase) // 等待超时
                 throw new TimeoutException();
         }
         return p;
@@ -936,6 +955,9 @@ public class Phaser {
      * method has no effect.  This method may be useful for
      * coordinating recovery after one or more tasks encounter
      * unexpected exceptions.
+     *
+     * <p>
+     * 强制终止Phaser
      */
     public void forceTermination() {
         // Only need to change root state
@@ -945,6 +967,8 @@ public class Phaser {
             if (UNSAFE.compareAndSwapLong(root, stateOffset,
                                           s, s | TERMINATION_BIT)) {
                 // signal all threads
+                // cas修改state，将state的最高位变成1，再获取phase时，phase就小于0了
+                // 两个队列中的等待线程，被唤醒后发现phase小于0，则会终止
                 releaseWaiters(0); // Waiters on evenQ
                 releaseWaiters(1); // Waiters on oddQ
                 return;
@@ -969,7 +993,7 @@ public class Phaser {
     }
 
     /**
-     * Returns the number of parties registered at this phaser.
+     * 获取注册的parties
      *
      * @return the number of parties
      */
@@ -982,6 +1006,9 @@ public class Phaser {
      * the current phase of this phaser. If this phaser has terminated,
      * the returned value is meaningless and arbitrary.
      *
+     * <p>
+     * 获取已经到达的线程数
+     *
      * @return the number of arrived parties
      */
     public int getArrivedParties() {
@@ -992,6 +1019,9 @@ public class Phaser {
      * Returns the number of registered parties that have not yet
      * arrived at the current phase of this phaser. If this phaser has
      * terminated, the returned value is meaningless and arbitrary.
+     *
+     * <p>
+     * 获取未到达的线程数
      *
      * @return the number of unarrived parties
      */
@@ -1019,7 +1049,8 @@ public class Phaser {
     }
 
     /**
-     * Returns {@code true} if this phaser has been terminated.
+     *
+     * 返回phaser是否已终止
      *
      * @return {@code true} if this phaser has been terminated
      */
@@ -1067,6 +1098,7 @@ public class Phaser {
      * @param registeredParties the current number of registered parties
      * @return {@code true} if this phaser should terminate
      */
+    // 子类可以改写此方法，返回true表示终止Phaser,返回false表示继续下一阶段的任务
     protected boolean onAdvance(int phase, int registeredParties) {
         return registeredParties == 0;
     }
@@ -1097,16 +1129,20 @@ public class Phaser {
     // Waiting mechanics
 
     /**
-     * Removes and signals threads from queue for phase.
+     * 从队列中移除线程并发出信号以进行阶段。
+     *
+     * <p>
+     * 执行releaseWaiters前会将phase加1，所以QNode中的phase就与当前的phase不一样了
      */
     private void releaseWaiters(int phase) {
         QNode q;   // first element of queue
         Thread t;  // its thread
         AtomicReference<QNode> head = (phase & 1) == 0 ? evenQ : oddQ;
         while ((q = head.get()) != null &&
-               q.phase != (int)(root.state >>> PHASE_SHIFT)) {
-            if (head.compareAndSet(q, q.next) &&
+               q.phase != (int)(root.state >>> PHASE_SHIFT)) { // QNode中的phase与当前节点的phase不一致
+            if (head.compareAndSet(q, q.next) && // 将q从链表移除,如果遍历完成head.get()返回null，终止循环
                 (t = q.thread) != null) {
+                // thread不为null，则唤醒该线程，为null则继续处理下一个节点
                 q.thread = null;
                 LockSupport.unpark(t);
             }
@@ -1120,6 +1156,9 @@ public class Phaser {
      * head of queue, which suffices to reduce memory footprint in
      * most usages.
      *
+     * <p>
+     * 将与当前phase不一致的节点从等待链表中移除
+     *
      * @return current phase on exit
      */
     private int abortWait(int phase) {
@@ -1128,8 +1167,10 @@ public class Phaser {
             Thread t;
             QNode q = head.get();
             int p = (int)(root.state >>> PHASE_SHIFT);
+            // 如果q对应的phase跟当前phase一样，则返回p
             if (q == null || ((t = q.thread) != null && q.phase == p))
                 return p;
+            // 如果q对应的phase跟当前phase不一样，将其从等待链表移除，并唤醒对应的线程
             if (head.compareAndSet(q, q.next) && t != null) {
                 q.thread = null;
                 LockSupport.unpark(t);
@@ -1158,8 +1199,10 @@ public class Phaser {
     static final int SPINS_PER_ARRIVAL = (NCPU < 2) ? 1 : 1 << 8;
 
     /**
-     * Possibly blocks and waits for phase to advance unless aborted.
-     * Call only on root phaser.
+     * 除非中止，否则可能会阻塞并等待阶段前进。 Call only on root phaser.
+     *
+     * <p>
+     * 让当前线程自旋或者休眠等待，直到phase发生改变或者响应中断或者等待超时，返回当前的phase
      *
      * @param phase current phase
      * @param node if non-null, the wait node to track interrupt and timeout;
@@ -1168,50 +1211,60 @@ public class Phaser {
      */
     private int internalAwaitAdvance(int phase, QNode node) {
         // assert root == this;
-        releaseWaiters(phase-1);          // ensure old queue clean
+        releaseWaiters(phase-1);          // ensure old queue clean 将前一阶段的等待队列中的线程都唤醒
         boolean queued = false;           // true when node is enqueued
         int lastUnarrived = 0;            // to increase spins upon change
         int spins = SPINS_PER_ARRIVAL;
         long s;
         int p;
+        // 当前phase还是指定值，会一直循环直到phase发生改变，即所有线程都到达了触发advance
         while ((p = (int)((s = state) >>> PHASE_SHIFT)) == phase) {
-            if (node == null) {           // spinning in noninterruptible mode
+            if (node == null) {           // spinning in noninterruptible mode 无期限等待
+                // 获取未到达的线程数
                 int unarrived = (int)s & UNARRIVED_MASK;
-                if (unarrived != lastUnarrived &&
+                if (unarrived != lastUnarrived && // 某个线程到达了，更新lastUnarrived，如果剩余未达到的线程数小于NCPU则增加自旋的次数
                     (lastUnarrived = unarrived) < NCPU)
                     spins += SPINS_PER_ARRIVAL;
                 boolean interrupted = Thread.interrupted();
-                if (interrupted || --spins < 0) { // need node to record intr
+                if (interrupted || --spins < 0) { // need node to record intr 如果被中断了或者自旋结束，则创建一个新QNode
                     node = new QNode(this, phase, false, false, 0L);
                     node.wasInterrupted = interrupted;
                 }
             }
+            // node不为null，判断是否需要终止等待，如果线程被中断且需要响应中断或者等待超时则可以通过此分支终止while循环
             else if (node.isReleasable()) // done or aborted
                 break;
-            else if (!queued) {           // push onto queue
+            // node不为null，需要阻塞
+            else if (!queued) {           // push onto queue 该Node未入队
                 AtomicReference<QNode> head = (phase & 1) == 0 ? evenQ : oddQ;
+                // 原head作为node的next节点
                 QNode q = node.next = head.get();
-                if ((q == null || q.phase == phase) &&
+                if ((q == null || q.phase == phase) && // 校验链表中节点的phase和当前节点一致
                     (int)(state >>> PHASE_SHIFT) == phase) // avoid stale enq
+                    // 加入到队列中，如果失败则while循环重试
                     queued = head.compareAndSet(q, node);
             }
             else {
+                // node已经加入到队列中
                 try {
+                    // 会调用node的block方法将当前线程阻塞，直到node的isReleasable方法返回true，线程被唤醒则继续下一个while循环
                     ForkJoinPool.managedBlock(node);
                 } catch (InterruptedException ie) {
                     node.wasInterrupted = true;
                 }
             }
         }
-
+        // phase发生改变，或者phase没变，但是线程被中断了或者等待超时
         if (node != null) {
             if (node.thread != null)
-                node.thread = null;       // avoid need for unpark()
-            if (node.wasInterrupted && !node.interruptible)
+                node.thread = null;       // avoid need for unpark() 避免releaseWaiters时被再次调用unpark
+            if (node.wasInterrupted && !node.interruptible) // 如果线程被中断且node不需要响应中断，则将当前线程标记为已中断
                 Thread.currentThread().interrupt();
+            // phase未改变，说明是等待超时或者响应中断
             if (p == phase && (p = (int)(state >>> PHASE_SHIFT)) == phase)
-                return abortWait(phase); // possibly clean up on abort
+                return abortWait(phase); // possibly clean up on abort 其实现和releaseWaiters类似，都是清理等待链表中跟当前phase不一致的节点，将其对应的线程唤醒
         }
+        // 尝试唤醒等待的线程，如果都唤醒了则直接返回
         releaseWaiters(phase);
         return p;
     }
