@@ -374,8 +374,14 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * that workerCount is 0 (which sometimes entails a recheck -- see
      * below).
      */
+
+    // 记录当前线程池的线程数量和状态，最高的3位记录状态，后29位记录线程池数量
     private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
+
+    // Integer.SIZE是32，COUNT_BITS就是29
     private static final int COUNT_BITS = Integer.SIZE - 3;
+
+    // CAPACITY的后29位都是1，即32位中后29位用来保存容量
     private static final int CAPACITY   = (1 << COUNT_BITS) - 1;//工作线程数存储在低29位
 
     //线程有五种状态：新建，就绪，运行，阻塞，死亡，线程池同样有五种状态：Running, SHUTDOWN, STOP, TIDYING, TERMINATED。
@@ -580,8 +586,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
     /**
      * 默认的拒绝策略（直接抛出RejectedExecutionException异常）
      */
-    private static final RejectedExecutionHandler defaultHandler =
-        new AbortPolicy();
+    private static final RejectedExecutionHandler defaultHandler = new AbortPolicy();
 
     /**
      * Permission required for callers of shutdown and shutdownNow.
@@ -603,6 +608,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * and failure to actually interrupt will merely delay response to
      * configuration changes so is not handled exceptionally.
      */
+    // 调用shutdown或者shutdownNow方法时校验调用方访问权限
     private static final RuntimePermission shutdownPerm =
         new RuntimePermission("modifyThread");
 
