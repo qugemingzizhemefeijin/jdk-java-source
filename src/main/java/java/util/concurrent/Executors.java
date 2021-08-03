@@ -594,24 +594,45 @@ public class Executors {
      * The default thread factory
      */
     static class DefaultThreadFactory implements ThreadFactory {
+
+        /**
+         * 记录线程池的个数
+         */
         private static final AtomicInteger poolNumber = new AtomicInteger(1);
+
+        /**
+         * 线程组
+         */
         private final ThreadGroup group;
+
+        /**
+         * 记录线程的个数
+         */
         private final AtomicInteger threadNumber = new AtomicInteger(1);
+
+        /**
+         * 线程名称前缀
+         */
         private final String namePrefix;
 
         DefaultThreadFactory() {
             SecurityManager s = System.getSecurityManager();
+            // 获取当前线程所属的线程组
             group = (s != null) ? s.getThreadGroup() :
                                   Thread.currentThread().getThreadGroup();
+            // 计算线程名称前缀，如果为了标识特定业务的线程池，应该改写此方法
             namePrefix = "pool-" +
                           poolNumber.getAndIncrement() +
                          "-thread-";
         }
 
         public Thread newThread(Runnable r) {
+            // 创建一个新线程，指定了Thread name
             Thread t = new Thread(group, r,
                                   namePrefix + threadNumber.getAndIncrement(),
                                   0);
+            // t的daemon和priority属性正常是跟创建该线程的父线程，即当前线程保持一致的
+            // 此处将其属性强制改写成非后台线程和正常优先级
             if (t.isDaemon())
                 t.setDaemon(false);
             if (t.getPriority() != Thread.NORM_PRIORITY)
