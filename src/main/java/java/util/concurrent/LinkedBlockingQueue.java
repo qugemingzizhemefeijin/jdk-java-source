@@ -72,6 +72,46 @@ import java.util.function.Consumer;
  * <p>This class is a member of the
  * <a href="{@docRoot}/../technotes/guides/collections/index.html">
  * Java Collections Framework</a>.
+ * <br><br>
+ * <p>
+ * LinkedBlockingQueue表示一个基于链表实现的可选的固定容量的，先进先出的，线程安全的队列（栈），其接口的语义和ArrayBlockingQueue基本一致。
+ *
+ * <br><br>
+ * <p>跟ArrayBlockingQueue的实现差异总结
+ * <ol>
+ *     <li>
+ *         ArrayBlockingQueue是基于循环数组实现的，容量是固定的，循环数组是指插入或者移除元素到达数组末尾时又会从头开始；<br>
+ *         LinkedBlockingQueue是基于单向链表的，如果指定容量就是固定容量，如果没有指定，则容量默认是int的最大值。
+ *     </li>
+ *     <li>
+ *         ArrayBlockingQueue中维护元素的个数的属性是一个普通的int类型，读取和修改该属性必须获取锁；<br>
+ *         LinkedBlockingQueue中是一个AtomicInteger类型，这样在判断队列是否为空时就不需要加锁了，可以快速返回，避免因为获取锁而等待。
+ *     </li>
+ *     <li>
+ *         ArrayBlockingQueue中插入元素和移除元素时都需要获取同一个锁，即这两个动作不能同时进行，这是因为移除元素时，移除元素的索引takeIndex不能超过插入元素的索引putIndex，如果等于就表示队列中元素已经都空了；<br>
+ *         LinkedBlockingQueue中插入元素和从链表头移除元素是两把锁，putLock和takeLock，这样可以让两个操作同时进行效率，效率更高；之所以能使用两把锁，这是因为往链表中插入元素是插入到链表尾，而移除元素是移除链表头的元素，两个是互相独立的。但是执行clear和remove方法，执行Itr的next和remove方法时必须同时获取两把锁，这是因为这种场景下不允许队列发生修改。
+ *     </li>
+ *     <li>
+ *         ArrayBlockingQueue中通过内部类Itr执行遍历时不需要上锁，ArrayBlockingQueue执行特定操作时会通过负责跟踪Itr的Itrs的回调方法，通过Itr比如某个对象被删除了，然后Itr会重新调整自己下一个遍历的元素，整体逻辑比较复杂；<br>
+ *         LinkedBlockingQueue的实现比较简单，执行next和remove方法时要获取两个锁，就避免了再遍历时链表发生改变了，实现相对简单明了。
+ *     </li>
+ *     <li>
+ *         ArrayBlockingQueue每插入一个元素后都需要调用signal方法唤醒因为队列是空的而阻塞的线程，即使此时没有等待的线程；<br>
+ *         LinkedBlockingQueue会校验插入元素前的队列容量，如果插入前的队列容量是0，那么有可能有线程因为队列是空的而阻塞，才会调用signal方法，减少不必要的调用。
+ *     </li>
+ *     <li>
+ *         ArrayBlockingQueue每移除一个元素后都需要调用signal方法唤醒因为队列是满的而阻塞的线程，即使此时没有等待的线程；<br>
+ *         LinkedBlockingQueue会校验移除元素前队列的容量，如果队列是满的，才有可能存在因为队列是满的而阻塞的线程，才会调用signal方法唤醒阻塞的线程，减少不必要的调用。
+ *     </li>
+ *     <li>
+ *         ArrayBlockingQueue执行clear或者drainTo方法时，移除了指定数量的元素，就会通过for循环调用该数量次的signal方法，唤醒因为线程满了而阻塞的线程，不能超过该数量且在Condition上有等待的线程。之所以不能超过该数量，是为了避免唤醒过多的线程，他们会因为队列满了而再次阻塞。<br>
+ *         LinkedBlockingQueue判断移除前队列的数量是满的，则通过signal方法唤醒因为队列是满的而阻塞的线程，但是只调用一次，因为队列是满的线程被唤醒后，会尝试插入到队列中，如果插入成功后还有多余的容量，则会尝试唤醒下一个因为队列是满的而阻塞的线程，从而巧妙的避免了线程被唤醒后因为队列是满的而再次阻塞的问题。
+ *     </li>
+ *     <li>
+ *         LinkedBlockingQueue在移除元素时，如果移除前队列容量大于1，会唤醒因为队列是空的而阻塞的线程，这是因为LinkedBlockingQueue下元素插入时，只有队列原来是空才会唤醒因为队列是空的而阻塞的线程，即如果有多个阻塞的线程，这种情形下只会唤醒一个。这时已经被唤醒的线程会判断队列中是否有多余的元素，如果有则继续唤醒下一个阻塞的线程，如此将所有阻塞的线程都唤醒。<br>
+ *         ArrayBlockingQueue下因为每次插入时都要唤醒一次因为队列是空而阻塞的线程，就不存在上述问题了。
+ *     </li>
+ * </ol>
  *
  * @since 1.5
  * @author Doug Lea
@@ -133,34 +173,34 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         Node(E x) { item = x; }
     }
 
-    /** The capacity bound, or Integer.MAX_VALUE if none */
+    /** 容量限制，如果没有，则为 Integer.MAX_VALUE */
     private final int capacity;
 
-    /** Current number of elements */
+    /** 当前队列中元素的个数 */
     private final AtomicInteger count = new AtomicInteger();
 
     /**
-     * Head of linked list.
+     * 链表头.
      * Invariant: head.item == null
      */
     transient Node<E> head;
 
     /**
-     * Tail of linked list.
+     * 链表尾.
      * Invariant: last.next == null
      */
     private transient Node<E> last;
 
-    /** Lock held by take, poll, etc */
+    /** 取出元素时获取的锁 */
     private final ReentrantLock takeLock = new ReentrantLock();
 
-    /** Wait queue for waiting takes */
+    /** 队列是空时的等待条件 */
     private final Condition notEmpty = takeLock.newCondition();
 
-    /** Lock held by put, offer, etc */
+    /** 插入元素时获取的锁 */
     private final ReentrantLock putLock = new ReentrantLock();
 
-    /** Wait queue for waiting puts */
+    /** 队列是满的等待条件 */
     private final Condition notFull = putLock.newCondition();
 
     /**
@@ -173,6 +213,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         final ReentrantLock takeLock = this.takeLock;
         takeLock.lock();
         try {
+            // 唤醒因为队列是空的而等待的线程
             notEmpty.signal();
         } finally {
             takeLock.unlock();
@@ -182,7 +223,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     /**
      * Signals a waiting put. Called only from take/poll.<br><br>
      *
-     * 发出信号，通知在等待写锁线程竞争
+     * 唤醒因为队列是满的而等待的线程
      */
     private void signalNotFull() {
         final ReentrantLock putLock = this.putLock;
@@ -213,6 +254,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     private E dequeue() {
         // assert takeLock.isHeldByCurrentThread();
         // assert head.item == null;
+        // 获取并移除链表头
         Node<E> h = head;
         Node<E> first = h.next;
         h.next = h; // help GC
@@ -263,6 +305,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     public LinkedBlockingQueue(int capacity) {
         if (capacity <= 0) throw new IllegalArgumentException();
         this.capacity = capacity;
+        // 初始化时head节点
         last = head = new Node<E>(null);//初始的时候队尾和对头指向一个空节点
     }
 
@@ -279,14 +322,16 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     public LinkedBlockingQueue(Collection<? extends E> c) {
         this(Integer.MAX_VALUE);
         final ReentrantLock putLock = this.putLock;
-        putLock.lock(); // Never contended, but necessary for visibility
+        putLock.lock(); // Never contended, but necessary for visibility 加锁的目的主要是为了保证修改对其他CPU立即可见
         try {
             int n = 0;
+            // 遍历集合c，将里面的元素加入到队列中
             for (E e : c) {
                 if (e == null)
                     throw new NullPointerException();
                 if (n == capacity)
                     throw new IllegalStateException("Queue full");
+                // 加入到队列中
                 enqueue(new Node<E>(e));
                 ++n;
             }
@@ -351,6 +396,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
              * signalled if it ever changes from capacity. Similarly
              * for all other uses of count in other wait guards.
              */
+            // 队列满了，循环等待，直到列队有可用容量
             while (count.get() == capacity) {//如果队列满了，则当前线程等待
                 notFull.await();
             }
@@ -384,8 +430,10 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         int c = -1;
         final ReentrantLock putLock = this.putLock;
         final AtomicInteger count = this.count;
+        // 如果被中断了抛出异常
         putLock.lockInterruptibly();
         try {
+            // 队列满了，循环等待，直到列队有可用容量或者等待超时了
             while (count.get() == capacity) {
                 if (nanos <= 0)//如果等待时间到了，则返回插入失败
                     return false;
@@ -394,6 +442,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
             enqueue(new Node<E>(e));//下面代码与上面类同
             c = count.getAndIncrement();
             if (c + 1 < capacity)
+                // 队列中还有可用容量，唤醒因为队列满了而阻塞的线程
                 notFull.signal();
         } finally {
             putLock.unlock();
@@ -418,24 +467,33 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
      */
     public boolean offer(E e) {
         if (e == null) throw new NullPointerException();
+        // 此处使用AtomicInteger，避免因为获取锁导致等待
         final AtomicInteger count = this.count;
         if (count.get() == capacity)
             return false;
         int c = -1;
+        // 创建一个新节点
         Node<E> node = new Node<E>(e);
         final ReentrantLock putLock = this.putLock;
         putLock.lock();
         try {
             if (count.get() < capacity) {
+                // 加入到队列中
                 enqueue(node);
+                // 增加元素个数
                 c = count.getAndIncrement();
                 if (c + 1 < capacity)
+                    // 队列中还有可用容量，唤醒因为队列满了而阻塞的线程
+                    // ArrayBlockingQueue中插入元素和获取元素是同一个锁，从队列中取出一个元素时会唤醒因为队列满而等待的线程
+                    // LinkedBlockingQueue是两个锁，从队列中取出元素
                     notFull.signal();
             }
         } finally {
             putLock.unlock();
         }
+        // c是插入之前的元素个数，只有个数是0的情况下才可能存在因为队列是空的而阻塞的线程
         if (c == 0)
+            // 唤醒因为队列是空的而等待的线程
             signalNotEmpty();
         return c >= 0;
     }
@@ -447,17 +505,22 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         final ReentrantLock takeLock = this.takeLock;
         takeLock.lockInterruptibly();
         try {
+            // 列为空则循环等待
             while (count.get() == 0) {//当队列为空，则等待
                 notEmpty.await();
             }
+            // 获取并移除链表头
             x = dequeue();
             c = count.getAndDecrement();//队列元素计数-1
             if (c > 1)//如果队列还有数据，则通知等待的线程进入sync队列，锁释放后即唤醒
+                // 唤醒因为队列是空的而阻塞的线程，c大于1，这次take移除了1个，还剩至少1个
                 notEmpty.signal();
         } finally {
             takeLock.unlock();
         }
+        // c 是在移除前的数量
         if (c == capacity)//如果c=满了，则通知等待写锁的线程解锁
+            // 唤醒因为队列是满的而等待的线程
             signalNotFull();
         return x;
     }
@@ -470,6 +533,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         final ReentrantLock takeLock = this.takeLock;
         takeLock.lockInterruptibly();
         try {
+            // 队列为空则循环等待，如果超时则返回null
             while (count.get() == 0) {//队列为0继续等待
                 if (nanos <= 0)//时间到了返回null
                     return null;
@@ -490,6 +554,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     //尝试获取队列头数据，获取不到则返回。
     public E poll() {
         final AtomicInteger count = this.count;
+        // 为空直接返回null
         if (count.get() == 0)
             return null;
         E x = null;
@@ -518,6 +583,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         final ReentrantLock takeLock = this.takeLock;
         takeLock.lock();
         try {
+            // 为空直接返回null，不用等待
             Node<E> first = head.next;
             if (first == null)
                 return null;
@@ -539,11 +605,14 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         // assert isFullyLocked();
         // p.next is not changed, to allow iterators that are
         // traversing p to maintain their weak-consistency guarantee.
+        // 将p从链表中移除
         p.item = null;
         trail.next = p.next;
         if (last == p)
+            // 如果p是最后一个节点，将trail作为last
             last = trail;
         if (count.getAndDecrement() == capacity)//如果队列由满-1，则通知put等待线程可以存放数据了
+            // 如果移除前链表是满的，则唤醒因为队列满了而等待的线程
             notFull.signal();
     }
 
@@ -561,10 +630,14 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     //从队列中移除指定的元素
     public boolean remove(Object o) {
         if (o == null) return false;
+        // 需要同时获取两个锁，因为移除的时候可能是移除链表尾部的节点也可能是链表中间的节点
+        // 前者需要获取takeLock，后者必须获取putLock，因为需要修改链表关系
         fullyLock();//需要全加锁
         try {
+            // 从head往后遍历，p表示当前节点，trail表示该节点的前一个节点
             for (Node<E> trail = head, p = trail.next; p != null; trail = p, p = p.next) {
                 if (o.equals(p.item)) {
+                    // 如果找到目标节点，将其从链表中移除
                     unlink(p, trail);
                     return true;
                 }
@@ -709,6 +782,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
     public void clear() {
         fullyLock();//全加锁
         try {
+            // 遍历整个链表，将各节点的链表关系和item属性都去除
             for (Node<E> p, h = head; (p = h.next) != null; h = p) {
                 h.next = h;
                 p.item = null;
@@ -716,6 +790,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
             head = last;
             // assert head.item == null && head.next == null;
             if (count.getAndSet(0) == capacity)//设置队列元素数量为0，如果队列本来是满的，则通知可能阻塞的写线程启动
+                // 如果修改前容量是满的，则唤醒因为队列是满的而阻塞的线程
                 notFull.signal();
         } finally {
             fullyUnlock();
@@ -739,6 +814,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
      * @throws IllegalArgumentException      {@inheritDoc}
      */
     public int drainTo(Collection<? super E> c, int maxElements) {
+        // 校验参数合法性
         if (c == null)
             throw new NullPointerException();
         if (c == this)
@@ -746,17 +822,22 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
         if (maxElements <= 0)
             return 0;
         boolean signalNotFull = false;
+        // 因为是取的链表头，所以不需要获取两个锁，只需要一个takeLock即可
         final ReentrantLock takeLock = this.takeLock;
         takeLock.lock();
         try {
+            // 取maxElements和元素个数的最小值
             int n = Math.min(maxElements, count.get());
             // count.get provides visibility to first n Nodes
             Node<E> h = head;
             int i = 0;
             try {
+                // 从head开始往后遍历，取n个元素，head是最早插入的
                 while (i < n) {
                     Node<E> p = h.next;
+                    // 将链表节点保存的元素引用放入集合中
                     c.add(p.item);
+                    // 链表引用关系清除
                     p.item = null;
                     h.next = h;
                     h = p;
@@ -765,9 +846,12 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
                 return n;
             } finally {
                 // Restore invariants even if c.add() threw
+                // n大于0，此处i肯定大于0，因为获取锁takeLock后，就只有当前线程可以移除节点
                 if (i > 0) {
                     // assert h.item == null;
+                    // 重置head
                     head = h;
+                    // 如果取出元素前队列是满的，则唤醒因为队列满的而等待的线程
                     signalNotFull = (count.getAndAdd(-i) == capacity);
                 }
             }
@@ -798,13 +882,25 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
          * still have it to return even if lost race with a take etc.
          */
 
+        /**
+         * next方法返回的节点
+         */
         private Node<E> current;
+
+        /**
+         * 上一次next方法返回的节点
+         */
         private Node<E> lastRet;
+
+        /**
+         * next方法返回的元素
+         */
         private E currentElement;
 
         Itr() {
             fullyLock();
             try {
+                // 因为head节点初始化时是一个空的Node节点，所以遍历的第一个节点是head的next节点
                 current = head.next;
                 if (current != null)
                     currentElement = current.item;
@@ -828,21 +924,29 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
             for (;;) {
                 Node<E> s = p.next;
                 if (s == p)
+                    // s等于p说明这是一个无效节点，返回链表头的有效节点
                     return head.next;
+                // s等于null，p是最后一个节点
                 if (s == null || s.item != null)
                     return s;
+                // 如果s不等于null但是item为null，则进入下一个节点
+                // 此时通常s等于p了
                 p = s;
             }
         }
 
         public E next() {
+            // 获取两个锁
             fullyLock();
             try {
                 if (current == null)
                     throw new NoSuchElementException();
                 E x = currentElement;
+                // 保存上一次的
                 lastRet = current;
+                // 获取下一个节点
                 current = nextNode(current);
+                // 获取下一个返回的元素
                 currentElement = (current == null) ? null : current.item;
                 return x;
             } finally {
@@ -857,10 +961,12 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
             try {
                 Node<E> node = lastRet;
                 lastRet = null;
+                // 从head开始往后遍历
                 for (Node<E> trail = head, p = trail.next;
                      p != null;
                      trail = p, p = p.next) {
                     if (p == node) {
+                        // 找到目标节点并移除
                         unlink(p, trail);
                         break;
                     }
