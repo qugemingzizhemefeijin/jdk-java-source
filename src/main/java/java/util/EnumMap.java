@@ -76,11 +76,14 @@ import sun.misc.SharedSecrets;
  * @see EnumSet
  * @since 1.5
  */
+// EnumMap和EnumSet 都是为key类型为枚举的定制集合类，相比直接使用HashMap或者HashSet效率更高，更节省内存占用
 public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
     implements java.io.Serializable, Cloneable
 {
     /**
      * The <tt>Class</tt> object for the enum type of all the keys of this map.
+     *
+     * K的类型
      *
      * @serial
      */
@@ -88,6 +91,9 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
 
     /**
      * All of the values comprising K.  (Cached for performance.)
+     *
+     * 保存K值的数组，根据枚举类型来初始化，初始完成后不会改变，删除某个key时只删除对应的value，key值对应的数组元素不变
+     *
      */
     private transient K[] keyUniverse;
 
@@ -95,16 +101,19 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
      * Array representation of this map.  The ith element is the value
      * to which universe[i] is currently mapped, or null if it isn't
      * mapped to anything, or NULL if it's mapped to null.
+     *
+     * 保存V值的数组，与保存K值的数组是一一对应的，可以通过枚举值的索引即ordinal属性来访问，该属性从0开始。
+     *
      */
     private transient Object[] vals;
 
     /**
-     * The number of mappings in this map.
+     * ap的元素个数
      */
     private transient int size = 0;
 
     /**
-     * Distinguished non-null value for representing null values.
+     * Distinguished non-null value for representing null values. 表示值为null的value
      */
     private static final Object NULL = new Object() {
         public int hashCode() {
@@ -135,7 +144,9 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
      */
     public EnumMap(Class<K> keyType) {
         this.keyType = keyType;
+        // 根据枚举类型获取所有的枚举值
         keyUniverse = getKeyUniverse(keyType);
+        // 创建一个跟枚举值数组长度一样的value数组
         vals = new Object[keyUniverse.length];
     }
 
@@ -147,6 +158,7 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
      * @throws NullPointerException if <tt>m</tt> is null
      */
     public EnumMap(EnumMap<K, ? extends V> m) {
+        // 直接赋值
         keyType = m.keyType;
         keyUniverse = m.keyUniverse;
         vals = m.vals.clone();
@@ -168,6 +180,7 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
     public EnumMap(Map<K, ? extends V> m) {
         if (m instanceof EnumMap) {
             EnumMap<K, ? extends V> em = (EnumMap<K, ? extends V>) m;
+            // 直接赋值
             keyType = em.keyType;
             keyUniverse = em.keyUniverse;
             vals = em.vals.clone();
@@ -175,7 +188,9 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
         } else {
             if (m.isEmpty())
                 throw new IllegalArgumentException("Specified map is empty");
+            // 获取key值的类型
             keyType = m.keySet().iterator().next().getDeclaringClass();
+            // 根据枚举类型获取所有的枚举值
             keyUniverse = getKeyUniverse(keyType);
             vals = new Object[keyUniverse.length];
             putAll(m);
@@ -243,6 +258,7 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
      * distinguish these two cases.
      */
     public V get(Object key) {
+        // 如果是有效的key值，则获取对应key值的索引对应的value
         return (isValidKey(key) ?
                 unmaskNull(vals[((Enum<?>)key).ordinal()]) : null);
     }
@@ -264,14 +280,17 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
      * @throws NullPointerException if the specified key is null
      */
     public V put(K key, V value) {
+        // 检查key的类型是否指定的枚举类型keyType
         typeCheck(key);
-
+        // 获取枚举值的索引
         int index = key.ordinal();
+        // 获取该索引对应的V
         Object oldValue = vals[index];
+        // 赋值
         vals[index] = maskNull(value);
-        if (oldValue == null)
+        if (oldValue == null) // 等于null，说明没有这个key值，size加1
             size++;
-        return unmaskNull(oldValue);
+        return unmaskNull(oldValue); // 返回原来的值
     }
 
     /**
@@ -284,12 +303,13 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
      *     <tt>null</tt> with the specified key.)
      */
     public V remove(Object key) {
-        if (!isValidKey(key))
+        if (!isValidKey(key)) // 不是有效key，返回null
             return null;
+        // 获取key值索引对应的value
         int index = ((Enum<?>)key).ordinal();
         Object oldValue = vals[index];
-        vals[index] = null;
-        if (oldValue != null)
+        vals[index] = null; // 置为null
+        if (oldValue != null) // 原来不为null，说明原来有这个key，则将size减1
             size--;
         return unmaskNull(oldValue);
     }
@@ -310,11 +330,13 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
      * Returns true if key is of the proper type to be a key in this
      * enum map.
      */
+    // 是否有效key值
     private boolean isValidKey(Object key) {
-        if (key == null)
+        if (key == null) // key不能为null
             return false;
 
         // Cheaper than instanceof Enum followed by getDeclaringClass
+        // 判断key值的类型是否是keyType
         Class<?> keyClass = key.getClass();
         return keyClass == keyType || keyClass.getSuperclass() == keyType;
     }
@@ -332,22 +354,26 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
      */
     public void putAll(Map<? extends K, ? extends V> m) {
         if (m instanceof EnumMap) {
+            // 如果是EnumMap
             EnumMap<?, ?> em = (EnumMap<?, ?>)m;
             if (em.keyType != keyType) {
                 if (em.isEmpty())
                     return;
+                // key类型不一致，抛出异常
                 throw new ClassCastException(em.keyType + " != " + keyType);
             }
-
+            // 遍历所有的key值
             for (int i = 0; i < keyUniverse.length; i++) {
+                // 获取m中对应key的value
                 Object emValue = em.vals[i];
                 if (emValue != null) {
-                    if (vals[i] == null)
+                    if (vals[i] == null) // 等于null，说明没有这个key值，size加1
                         size++;
-                    vals[i] = emValue;
+                    vals[i] = emValue; // 赋值
                 }
             }
         } else {
+            // m是普通的HashMap，遍历键值对，调用put方法
             super.putAll(m);
         }
     }
@@ -356,6 +382,7 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
      * Removes all mappings from this map.
      */
     public void clear() {
+        // 将vals置为null，注意保存key值的数组keyUniverse没有变更
         Arrays.fill(vals, null);
         size = 0;
     }
@@ -748,6 +775,9 @@ public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
     /**
      * Returns all of the values comprising K.
      * The result is uncloned, cached, and shared by all callers.
+     * <br>
+     * 返回某个枚举类的所有枚举值，相当于调用对应枚举类的values方法。
+     *
      */
     private static <K extends Enum<K>> K[] getKeyUniverse(Class<K> keyType) {
         return SharedSecrets.getJavaLangAccess()

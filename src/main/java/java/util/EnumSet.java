@@ -77,16 +77,24 @@ import sun.misc.SharedSecrets;
  * @see EnumMap
  * @serial exclude
  */
+// EnumMap和EnumSet 都是为key类型为枚举的定制集合类，相比直接使用HashMap或者HashSet效率更高，更节省内存占用。
+// 注意EnumSet是一个抽象类，不能直接使用，该类有两个子类。枚举值的个数小于等于64时使用RegularEnumSet，大于64时使用JumboEnumSet
 public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
     implements Cloneable, java.io.Serializable
 {
     /**
      * The class of all the elements of this set.
+     *
+     * 枚举的类型
+     *
      */
     final Class<E> elementType;
 
     /**
      * All of the values comprising T.  (Cached for performance.)
+     *
+     * 枚举类E的所有枚举值
+     *
      */
     final Enum<?>[] universe;
 
@@ -99,6 +107,8 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
 
     /**
      * Creates an empty enum set with the specified element type.
+     *
+     * 创建一个空的EnumSet
      *
      * @param <E> The class of the elements in the set
      * @param elementType the class object of the element type for this enum
@@ -120,6 +130,8 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
     /**
      * Creates an enum set containing all of the elements in the specified
      * element type.
+     *
+     * 创建一个包含指定枚举类所有枚举值的EnumSet
      *
      * @param <E> The class of the elements in the set
      * @param elementType the class object of the element type for this enum
@@ -168,10 +180,12 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
      */
     public static <E extends Enum<E>> EnumSet<E> copyOf(Collection<E> c) {
         if (c instanceof EnumSet) {
+            // 如果是EnumSet
             return ((EnumSet<E>)c).clone();
         } else {
             if (c.isEmpty())
                 throw new IllegalArgumentException("Collection is empty");
+            // 如果不是EnumSet，则遍历其中的元素，逐一添加到EnumSet中
             Iterator<E> i = c.iterator();
             E first = i.next();
             EnumSet<E> result = EnumSet.of(first);
@@ -191,8 +205,10 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
      * @return The complement of the specified set in this set
      * @throws NullPointerException if <tt>s</tt> is null
      */
+    // 返回的EnumSet中包含了所有的枚举值
     public static <E extends Enum<E>> EnumSet<E> complementOf(EnumSet<E> s) {
         EnumSet<E> result = copyOf(s);
+        // complement会补齐所有s中不包含的枚举值，由子类实现
         result.complement();
         return result;
     }
@@ -206,6 +222,8 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
      * an enum set initially containing an arbitrary number of elements, but
      * is likely to run slower than the overloadings that do not use varargs.
      *
+     * 创建只包含一个指定枚举值的EnumSet，有多个重载版本，枚举值从1个到5个
+     *
      * @param <E> The class of the specified element and of the set
      * @param e the element that this set is to contain initially
      * @throws NullPointerException if <tt>e</tt> is null
@@ -213,6 +231,7 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
      */
     public static <E extends Enum<E>> EnumSet<E> of(E e) {
         EnumSet<E> result = noneOf(e.getDeclaringClass());
+        // 子类实现
         result.add(e);
         return result;
     }
@@ -336,6 +355,7 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
     @SafeVarargs
     public static <E extends Enum<E>> EnumSet<E> of(E first, E... rest) {
         EnumSet<E> result = noneOf(first.getDeclaringClass());
+        // rest是不定数量的数组，将其中的元素都添加到Set中
         result.add(first);
         for (E e : rest)
             result.add(e);
@@ -356,10 +376,12 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
      * @return an enum set initially containing all of the elements in the
      *         range defined by the two specified endpoints
      */
+    // 创建包含指定范围内的枚举值的EnumSet
     public static <E extends Enum<E>> EnumSet<E> range(E from, E to) {
         if (from.compareTo(to) > 0)
             throw new IllegalArgumentException(from + " > " + to);
         EnumSet<E> result = noneOf(from.getDeclaringClass());
+        // 子类实现
         result.addRange(from, to);
         return result;
     }
@@ -378,6 +400,7 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
     @SuppressWarnings("unchecked")
     public EnumSet<E> clone() {
         try {
+            // 调用Object的clone方法
             return (EnumSet<E>) super.clone();
         } catch(CloneNotSupportedException e) {
             throw new AssertionError(e);
@@ -401,6 +424,9 @@ public abstract class EnumSet<E extends Enum<E>> extends AbstractSet<E>
     /**
      * Returns all of the values comprising E.
      * The result is uncloned, cached, and shared by all callers.
+     *
+     * 返回指定枚举类的所有枚举值
+     *
      */
     private static <E extends Enum<E>> E[] getUniverse(Class<E> elementType) {
         return SharedSecrets.getJavaLangAccess()
