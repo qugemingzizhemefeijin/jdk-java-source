@@ -631,6 +631,9 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
      * runWorker).
      */
     // 线程池中的工作线程对象
+    // 此处可以看出 worker 既是一个 Runnable 任务，也实现了 AQS（实际上是用 AQS 实现了一个独占锁，这样由于 worker 运行时会上锁，执行 shutdown，
+    // setCorePoolSize，setMaximumPoolSize等方法时会试着中断线程（interruptIdleWorkers），在这个方法中断方法中会先尝试获取 worker 的锁，
+    // 如果不成功，说明 worker 在运行中，此时会先让 worker 执行完任务再关闭 worker 的线程，实现优雅关闭线程的目的）
     private final class Worker
         extends AbstractQueuedSynchronizer
         implements Runnable
@@ -644,6 +647,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
         /** Thread this worker is running in.  Null if factory fails. 执行任务的线程 */
         final Thread thread;
         /** 要运行的初始任务。可能为空. */
+        // 如果当前线程数少于核心线程数，创建线程并将提交的任务交给 worker 处理处理，此时 firstTask 即为此提交的任务，如果 worker 从 workQueue 中获取任务，则 firstTask 为空
         Runnable firstTask;
         /** 每个线程任务计数器 */
         volatile long completedTasks;
@@ -653,6 +657,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
          * @param firstTask the first task (null if none)
          */
         Worker(Runnable firstTask) {
+            // 初始化为 -1，这样在线程运行前（调用runWorker）禁止中断，在 interruptIfStarted() 方法中会判断 getState()>=0
             setState(-1); // inhibit interrupts until runWorker
             this.firstTask = firstTask;
             //调用工厂类并创建线程
@@ -661,6 +666,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
 
         /** 将主运行循环委托给外部runWorker  */
         public void run() {
+            // thread 启动后会调用此方法
             runWorker(this);
         }
 
@@ -676,6 +682,8 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
 
         //尝试获取锁
         protected boolean tryAcquire(int unused) {
+            // 从这里可以看出它是一个独占锁，因为当获取锁后，cas 设置 state 不可能成功，这里我们也能明白上文中将 state 设置为 -1 的作用，
+            // 这种情况下永远不可能获取得锁，而 worker 要被中断首先必须获取锁
             if (compareAndSetState(0, 1)) {
                 // 将state从0改成1，将当前线程设置为持有锁的线程
                 setExclusiveOwnerThread(Thread.currentThread());
@@ -707,8 +715,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
          * 如果当前Worker已经开始，并且thread不等于空，并且是非中断状态，则触发线程中断。
          * <p>如果线程已启动，将其中断，state的初始值是-1，runWorker方法将其改成0后再加锁
          */
+        // 中断线程，这个方法会被 shutdownNow 调用，从中可以看出 shutdownNow 要中断线程不需要获取锁，也就是说如果线程正在运行，照样会给你中断掉，
+        // 所以一般来说我们不用 shutdownNow 来中断线程，太粗暴了，中断时线程很可能在执行任务，影响任务执行
         void interruptIfStarted() {
             Thread t;
+            // 中断也是有条件的，必须是 state >= 0 且 t != null 且线程未被中断
+            // 如果 state == -1 ，不执行中断，再次明白了为啥上文中 setState(-1) 的意义
             if (getState() >= 0 && (t = thread) != null && !t.isInterrupted()) {
                 try {
                     t.interrupt();
@@ -1051,9 +1063,11 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
                     // (core=0则在添加任务的时候不会立即启动线程，而是先放入到队列中)
                     int rs = runStateOf(ctl.get());
 
+                    // 如果线程池状态小于 SHUTDOWN（即为 RUNNING），
+                    // 或者状态为 SHUTDOWN 但 firstTask == null（代表不接收任务，只是创建线程处理 workQueue 中的任务），则满足添加 worker 的条件
                     if (rs < SHUTDOWN ||
                         (rs == SHUTDOWN && firstTask == null)) {
-                        if (t.isAlive()) // 如果新线程已经开始运行了抛出异常
+                        if (t.isAlive()) // 如果线程已启动，显然有问题（因为创建 worker 后，还没启动线程呢），抛出异常
                             throw new IllegalThreadStateException();
                         //将线程添加到工作组中
                         workers.add(w);
@@ -1073,7 +1087,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
                 }
             }
         } finally {
-            //如果线程启动失败，则回滚一些信息，如从workers中移除，减少线程数量等
+            // 添加线程失败，执行 addWorkerFailed 方法，主要做了将 worker 从 workers 中移除，减少线程数，并尝试着关闭线程池这样的操作
             if (! workerStarted)
                 addWorkerFailed(w);
         }
@@ -1125,13 +1139,13 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
         try {
             // 累加已完成的任务数
             completedTaskCount += w.completedTasks;
-            // 移除该worker
+            // 加锁确保线程安全地移除 worker
             workers.remove(w);
         } finally {
             mainLock.unlock();
         }
 
-        //尝试判断是否线程池中断了，并进行一些资源回收
+        // worker 既然异常退出，可能线程池状态变了（如执行 shutdown 等），尝试判断是否线程池中断了，并进行一些资源回收
         tryTerminate();
 
         int c = ctl.get();
@@ -1278,10 +1292,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
         //当一个线程第一次过来，一般会带有firstTask的任务，也就是为到核心线程数的时候，提交的任务会直接被Worker持有并优先执行
         Runnable task = w.firstTask;
         w.firstTask = null;
+        // unlock 会调用 tryRelease 方法将 state 设置成 0，代表允许中断
         w.unlock(); // allow interrupts 将state的值由初始的-1改成0，表示该Worker已启动
         //如果getTask()抛出异常或者beforeExecute、afterExecute异常，则true，正常结束则false
         boolean completedAbruptly = true;
         try {
+            // 如果在提交任务时创建了线程，并把任务丢给此线程，则会先执行此 task
             // getTask方法从任务队列中获取任务，如果队列为空会阻塞当前线程
             while (task != null || (task = getTask()) != null) {
                 w.lock(); //加锁是为了防止 interruptIdleWorkers() 地方造成线程被中断
@@ -1833,7 +1849,8 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
     }
 
     /**
-     * 启动所有核心线程，使它们闲置地等待工作。 仅在执行新任务时才覆盖启动核心线程的默认策略。
+     * 启动所有核心线程，使它们闲置地等待工作。 仅在执行新任务时才覆盖启动核心线程的默认策略。<br>
+     * 如果预料到系统一开始可执行的任务非常的多，则可以在提交任务前先执行次方法，将所有的核心线程预先启动。
      *
      * @return the number of threads started
      */
