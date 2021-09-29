@@ -278,9 +278,21 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * TreeNode subclass, and in LinkedHashMap for its Entry subclass.)
      */
     static class Node<K,V> implements Map.Entry<K,V> {
+
+        /**
+         * key的hash值
+         */
         final int hash;
+
+        // put入的key值
         final K key;
+
+        // put入的value值
         V value;
+
+        /**
+         * 通过next属性将分配到同一个桶的元素关联起来，形成单向链表
+         */
         Node<K,V> next;
 
         Node(int hash, K key, V value, Node<K,V> next) {
@@ -1892,22 +1904,48 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * Entry for Tree bins. Extends LinkedHashMap.Entry (which in turn
      * extends Node) so can be used as extension of either regular or
      * linked node.
+     * <br>
+     * TreeNode继承自LinkedHashMap.Entry<K,V>，后者继承自HashMap.Node<K,V>，只是增加了两个属性before和after，用于保存当前节点的前后节点引用，从而形成一条可以双向遍历的链表。
+     * <br>
+     * TreeNode继承自LinkedHashMap.Entry<K,V>是为了方便LinkedHashMap实现，本身并没有直接使用before和after两个属性。
+     * <br>
+     * 注意TreeNode的实现同时维护了红黑树和双向链式两种应用关系，这样便于在红黑树和链表之间做形态转换。
      */
     static final class TreeNode<K,V> extends LinkedHashMap.Entry<K,V> {
+        /**
+         * 当前节点的父节点
+         */
         TreeNode<K,V> parent;  // red-black tree links
+
+        /**
+         * 当前节点的左节点
+         */
         TreeNode<K,V> left;
+
+        /**
+         * 当前节点的右节点
+         */
         TreeNode<K,V> right;
+
+        /**
+         * 当前节点的前一个节点，与next属性对应
+         */
         TreeNode<K,V> prev;    // needed to unlink next upon deletion
+
+        /**
+         * 当前节点是否红色节点
+         */
         boolean red;
         TreeNode(int hash, K key, V val, Node<K,V> next) {
             super(hash, key, val, next);
         }
 
         /**
-         * Returns root of tree containing this node.
+         * 返回当前节点的根节点
          */
         final TreeNode<K,V> root() {
             for (TreeNode<K,V> r = this, p;;) {
+                // 该节点的父节点为null时该节点为根节点
                 if ((p = r.parent) == null)
                     return r;
                 r = p;
