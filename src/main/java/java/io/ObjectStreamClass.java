@@ -1712,20 +1712,30 @@ public class ObjectStreamClass implements Serializable {
     }
 
     /**
-     * Computes the default serial version UID value for the given class.
+     * 计算一个类的默认序列化UID值。一般用于实现了Serializable接口但是没有给定一个serialVersionUID静态字段的情况下才会被调用。
+     *
+     * 这里就是会明确体现了如果我们不设置serialVersionUID，稍微新增了方法，方法字段，类修饰符，方法修饰符等都会造成suid的变化。
+     *
+     * 
+     *
      */
     private static long computeDefaultSUID(Class<?> cl) {
+        // 检查是否是代理对象和是否是 Serializable 的子类或子接口
         if (!Serializable.class.isAssignableFrom(cl) || Proxy.isProxyClass(cl))
         {
             return 0L;
         }
 
         try {
+            // 将输出缓冲到字节数组中
             ByteArrayOutputStream bout = new ByteArrayOutputStream();
+            // 这里我们可以理解为 dout 将输出缓存到 bout
             DataOutputStream dout = new DataOutputStream(bout);
 
+            // 类名写入字节数组
             dout.writeUTF(cl.getName());
 
+            // 获取类名修饰符
             int classMods = cl.getModifiers() &
                 (Modifier.PUBLIC | Modifier.FINAL |
                  Modifier.INTERFACE | Modifier.ABSTRACT);
@@ -1733,13 +1743,19 @@ public class ObjectStreamClass implements Serializable {
             /*
              * compensate for javac bug in which ABSTRACT bit was set for an
              * interface only if the interface declared methods
+             *
+             * 获取类成员方法
              */
             Method[] methods = cl.getDeclaredMethods();
+            // 如果类是接口
             if ((classMods & Modifier.INTERFACE) != 0) {
                 classMods = (methods.length > 0) ?
+                    // 如果存在方法就与抽象修饰符进行或运算
                     (classMods | Modifier.ABSTRACT) :
+                    // 不存在方法就与抽象修饰符的反码进行与运算
                     (classMods & ~Modifier.ABSTRACT);
             }
+            // 类修饰符写入字节数组
             dout.writeInt(classMods);
 
             if (!cl.isArray()) {
@@ -1747,54 +1763,71 @@ public class ObjectStreamClass implements Serializable {
                  * compensate for change in 1.2FCS in which
                  * Class.getInterfaces() was modified to return Cloneable and
                  * Serializable for array classes.
+                 *
+                 * 补偿对于数组的处理，对于数组类型将会得到 Cloneable 和 Serializable，所以数组不必走进来
                  */
                 Class<?>[] interfaces = cl.getInterfaces();
                 String[] ifaceNames = new String[interfaces.length];
                 for (int i = 0; i < interfaces.length; i++) {
                     ifaceNames[i] = interfaces[i].getName();
                 }
+                // 对接口名进行排序，避免对于同样的接口数组产生不同的写入
                 Arrays.sort(ifaceNames);
                 for (int i = 0; i < ifaceNames.length; i++) {
+                    // 接口名写入字节数组
                     dout.writeUTF(ifaceNames[i]);
                 }
             }
 
+            // 获取成员变量
             Field[] fields = cl.getDeclaredFields();
+            // 获取成员变量的签名
             MemberSignature[] fieldSigs = new MemberSignature[fields.length];
             for (int i = 0; i < fields.length; i++) {
                 fieldSigs[i] = new MemberSignature(fields[i]);
             }
             Arrays.sort(fieldSigs, new Comparator<MemberSignature>() {
+                // 按照成员变量名进行排序
                 public int compare(MemberSignature ms1, MemberSignature ms2) {
                     return ms1.name.compareTo(ms2.name);
                 }
             });
+            // 对成员变量进行处理
             for (int i = 0; i < fieldSigs.length; i++) {
                 MemberSignature sig = fieldSigs[i];
+                // 得到成员变量修饰符
                 int mods = sig.member.getModifiers() &
                     (Modifier.PUBLIC | Modifier.PRIVATE | Modifier.PROTECTED |
                      Modifier.STATIC | Modifier.FINAL | Modifier.VOLATILE |
                      Modifier.TRANSIENT);
+                // 非私有则进行写入
                 if (((mods & Modifier.PRIVATE) == 0) ||
+                    // 如果是 static 或 transient 则不写入
                     ((mods & (Modifier.STATIC | Modifier.TRANSIENT)) == 0))
+                // 也就是说，在这里如果是非私有则一定写入，如果是私有并且不满足 static 或 transient 才写入
                 {
+                    // 签名信息写入字节数组
                     dout.writeUTF(sig.name);
                     dout.writeInt(mods);
                     dout.writeUTF(sig.signature);
                 }
             }
 
+            // 静态类则写入
             if (hasStaticInitializer(cl)) {
                 dout.writeUTF("<clinit>");
                 dout.writeInt(Modifier.STATIC);
                 dout.writeUTF("()V");
             }
 
+            // 获取构造方法
             Constructor<?>[] cons = cl.getDeclaredConstructors();
             MemberSignature[] consSigs = new MemberSignature[cons.length];
+            // 获取构造方法签名
             for (int i = 0; i < cons.length; i++) {
                 consSigs[i] = new MemberSignature(cons[i]);
             }
+            // 对构造方法签名进行排序
             Arrays.sort(consSigs, new Comparator<MemberSignature>() {
                 public int compare(MemberSignature ms1, MemberSignature ms2) {
                     return ms1.signature.compareTo(ms2.signature);
@@ -1802,11 +1835,13 @@ public class ObjectStreamClass implements Serializable {
             });
             for (int i = 0; i < consSigs.length; i++) {
                 MemberSignature sig = consSigs[i];
+                // 获取构造方法修饰符
                 int mods = sig.member.getModifiers() &
                     (Modifier.PUBLIC | Modifier.PRIVATE | Modifier.PROTECTED |
                      Modifier.STATIC | Modifier.FINAL |
                      Modifier.SYNCHRONIZED | Modifier.NATIVE |
                      Modifier.ABSTRACT | Modifier.STRICT);
+                // 如果是非私有构造方法则进行写入
                 if ((mods & Modifier.PRIVATE) == 0) {
                     dout.writeUTF("<init>");
                     dout.writeInt(mods);
@@ -1815,9 +1850,11 @@ public class ObjectStreamClass implements Serializable {
             }
 
             MemberSignature[] methSigs = new MemberSignature[methods.length];
+            // 获取方法的签名
             for (int i = 0; i < methods.length; i++) {
                 methSigs[i] = new MemberSignature(methods[i]);
             }
+            // 方法签名排序
             Arrays.sort(methSigs, new Comparator<MemberSignature>() {
                 public int compare(MemberSignature ms1, MemberSignature ms2) {
                     int comp = ms1.name.compareTo(ms2.name);
@@ -1829,11 +1866,13 @@ public class ObjectStreamClass implements Serializable {
             });
             for (int i = 0; i < methSigs.length; i++) {
                 MemberSignature sig = methSigs[i];
+                // 获取方法修饰符
                 int mods = sig.member.getModifiers() &
                     (Modifier.PUBLIC | Modifier.PRIVATE | Modifier.PROTECTED |
                      Modifier.STATIC | Modifier.FINAL |
                      Modifier.SYNCHRONIZED | Modifier.NATIVE |
                      Modifier.ABSTRACT | Modifier.STRICT);
+                // 非私有则写入
                 if ((mods & Modifier.PRIVATE) == 0) {
                     dout.writeUTF(sig.name);
                     dout.writeInt(mods);
@@ -1841,8 +1880,10 @@ public class ObjectStreamClass implements Serializable {
                 }
             }
 
+            // 刷新，将结果保存到字节数组
             dout.flush();
 
+            // 对之前字节数组进行 SHA 运算
             MessageDigest md = MessageDigest.getInstance("SHA");
             byte[] hashBytes = md.digest(bout.toByteArray());
             long hash = 0;
