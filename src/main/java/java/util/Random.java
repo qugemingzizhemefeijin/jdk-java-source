@@ -201,6 +201,7 @@ class Random implements java.io.Serializable {
         do {
             oldseed = seed.get();
             nextseed = (oldseed * multiplier + addend) & mask;
+            // CAS 方式保证线程安全，但是多线程情况下可能存在性能问题
         } while (!seed.compareAndSet(oldseed, nextseed));
         return (int)(nextseed >>> (48 - bits));
     }

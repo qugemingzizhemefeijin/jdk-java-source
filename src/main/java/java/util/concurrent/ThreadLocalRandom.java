@@ -126,8 +126,8 @@ public class ThreadLocalRandom extends Random {
      */
 
     /** Generates per-thread initialization/probe field */
-    private static final AtomicInteger probeGenerator =
-        new AtomicInteger();
+    // 每个线程的初始化探针字段
+    private static final AtomicInteger probeGenerator = new AtomicInteger();
 
     /**
      * The next seed for default constructors.
@@ -178,6 +178,11 @@ public class ThreadLocalRandom extends Random {
         return z ^ (z >>> 33);
     }
 
+    /**
+     * 根据新种子生成随机数，随机数算法和 Random 一样
+     * @param z 种子
+     * @return int
+     */
     private static int mix32(long z) {
         z = (z ^ (z >>> 33)) * 0xff51afd7ed558ccdL;
         return (int)(((z ^ (z >>> 33)) * 0xc4ceb9fe1a85ec53L) >>> 32);
@@ -204,6 +209,7 @@ public class ThreadLocalRandom extends Random {
      * though the initialization is purely thread-local, we need to
      * rely on (static) atomic generators to initialize the values.
      */
+    // 根据 probeGenerator计算当前线程中 threadLocalRandomProbe的初始化值，然后根据 seeder 计算当前线程的初始化种子，而后把这两个变量设置到当前线程。
     static final void localInit() {
         int p = probeGenerator.addAndGet(PROBE_INCREMENT);
         int probe = (p == 0) ? 1 : p; // skip 0
@@ -219,8 +225,11 @@ public class ThreadLocalRandom extends Random {
      * @return the current thread's {@code ThreadLocalRandom}
      */
     public static ThreadLocalRandom current() {
+        // 如果当前线程中threadLocalRandomProbe的变量值为0（默认是0），则说明当前线程是第一次调用ThreadLocalRandom.current()方法，
+        // 那就需要调用 localInit方法计算当前线程的初始化种子变量，这是一种优化（在不需要使用随机数功能时就不初始化Thread类中的种子变量）
         if (UNSAFE.getInt(Thread.currentThread(), PROBE) == 0)
             localInit();
+        // instance 是静态，多个线程返回的都是同一个ThreadLocalRandom 实例
         return instance;
     }
 
@@ -236,8 +245,14 @@ public class ThreadLocalRandom extends Random {
             throw new UnsupportedOperationException();
     }
 
+    /**
+     * 生成新的种子，保存在 Thread.threadLocalRandomSeed 中。 GAMMA=0x9e3779b97f4a7c15L
+     * @return 随机种子
+     */
     final long nextSeed() {
         Thread t; long r; // read and update per-thread seed
+        // r = UNSAFE.getLong(t, SEED) 这里是获取的当前线程中 threadLocalRandomSeed 变量的值，
+        // 然后在种子的基础上累加GAMMA值作为新种子，而后使用UNSAFE的putLong方法把新种子放入当前线程的threadLocalRandomSeed变量中
         UNSAFE.putLong(t = Thread.currentThread(), SEED,
                        r = UNSAFE.getLong(t, SEED) + GAMMA);
         return r;
@@ -347,14 +362,24 @@ public class ThreadLocalRandom extends Random {
      *         (inclusive) and the bound (exclusive)
      * @throws IllegalArgumentException if {@code bound} is not positive
      */
+    // nextInt(int bound) 和 nextInt 的思路是一样的，
+    // 先调用 mix32(nextSeed()) 方法生成随机数（int类型的范围），
+    // 再对参数 n 进行判断，如果 n 恰好为 2 的方幂，那么直接移位就可以得到想要的结果；
+    // 如果不是 2 的方幂，那么就对 n 取余，最终使结果在[0,n)范围内。
+    // 另外，for 循环语句的目的是防止结果为负数。
     public int nextInt(int bound) {
+        // 限制上限（不包括）参数检查
         if (bound <= 0)
             throw new IllegalArgumentException(BadBound);
+        // 根据当前线程中的种子计算新种子
         int r = mix32(nextSeed());
         int m = bound - 1;
+        // 随机数判断
         if ((bound & m) == 0) // power of two
+            // 取余数
             r &= m;
         else { // reject over-represented candidates
+            // 重试直到符合区间要求
             for (int u = r >>> 1;
                  u + m - (r = u % bound) < 0;
                  u = mix32(nextSeed()) >>> 1)
@@ -1057,12 +1082,16 @@ public class ThreadLocalRandom extends Random {
     private static final long SECONDARY;
     static {
         try {
+            // 获取UNSAFE 实例
             UNSAFE = sun.misc.Unsafe.getUnsafe();
             Class<?> tk = Thread.class;
+            // 获取Thread类中threadLocalRandomSeed变量在Thread实例中的偏移量
             SEED = UNSAFE.objectFieldOffset
                 (tk.getDeclaredField("threadLocalRandomSeed"));
+            // 获取Thread类中threadLocalRandomProbe变量在Thread实例中的偏移量
             PROBE = UNSAFE.objectFieldOffset
                 (tk.getDeclaredField("threadLocalRandomProbe"));
+            // 获取Thread类中threadLocalRandomSecondarySeed变量在Thread实例中的偏移量
             SECONDARY = UNSAFE.objectFieldOffset
                 (tk.getDeclaredField("threadLocalRandomSecondarySeed"));
         } catch (Exception e) {
