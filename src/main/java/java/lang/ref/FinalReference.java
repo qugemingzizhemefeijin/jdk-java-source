@@ -41,8 +41,38 @@ package java.lang.ref;
  * }
  *
  * 那么jvm又是在何时调用register方法的呢？
- * 取决于-XX:+RegisterFinalizersAtInit这个参数，默认为true，在调用构造函数返回之前调用Finalizer.register方法
+ * 取决于-XX:+RegisterFinalizersAtInit这个参数，默认为true，在调用构造函数返回之前调用Finalizer.register方法（先分配空间，再调用构造函数）
  * 如果通过-XX:-RegisterFinalizersAtInit关闭了该参数，那将在对象空间分配好之后就将这个对象注册进去。
+ *
+ *
+ * RegisterFinalizersAtInit=true时，详细请见：c1_GraphBuilder.cpp
+ *
+ * void GraphBuilder::method_return(Value x) {
+ *  ...
+ *  if (RegisterFinalizersAtInit &&
+ *      method()->intrinsic_id() == vmIntrinsics::_Object_init) {
+ *      call_register_finalizer();
+ *  }
+ *  ...
+ * }
+ *
+ * RegisterFinalizersAtInit=false时，详细请见：instanceKlass.cpp
+ *
+ * instanceOop InstanceKlass::allocate_instance(TRAPS) {
+ *   bool has_finalizer_flag = has_finalizer(); // Query before possible GC
+ *   int size = size_helper();  // Query before forming handle.
+ *
+ *   KlassHandle h_k(THREAD, this);
+ *
+ *   instanceOop i;
+ *
+ *   i = (instanceOop)CollectedHeap::obj_allocate(h_k, size, CHECK_NULL);
+ *   if (has_finalizer_flag && !RegisterFinalizersAtInit) {
+ *     i = register_finalizer(i, CHECK_NULL);
+ *   }
+ *   return i;
+ * }
+ *
  * </pre>
  *
  * @see java.lang.ref.Finalizer

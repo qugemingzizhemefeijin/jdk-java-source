@@ -1969,6 +1969,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
      */
     public class ConditionObject implements Condition, java.io.Serializable {
         private static final long serialVersionUID = 1173984872572414699L;
+        // 条件队列的头尾节点
         /** First node of condition queue. */
         private transient Node firstWaiter;
         /** Last node of condition queue. */
@@ -2087,6 +2088,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
             Node first = firstWaiter;
             //首节点不为null，说明完成了初始化，同时队列中有节点存在
             if (first != null)
+                // 开始唤醒
                 doSignal(first);
         }
 

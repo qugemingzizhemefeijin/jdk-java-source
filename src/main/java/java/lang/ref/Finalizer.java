@@ -31,6 +31,49 @@ import sun.misc.JavaLangAccess;
 import sun.misc.SharedSecrets;
 import sun.misc.VM;
 
+/**
+ * JVM是如何实现finalize方法的呢？
+ * <ul>
+ *     <li>
+ *         JVM在加载类的时候，会去识别该类是否实现了finalize方法并且该方法体不会空；若是含有有意义的finalize方法体会标记出该类为“finalize Class”。
+ *     </li>
+ *     <li>
+ *         在new “finalize Class”对象时，会调用Finalizer.register方法，在该方法中new 一个Finalizer对象，Finalizer对象会引用原始对象，
+ *         然后把Finalizer对象注册到Finalizer对象链里（这样就可以保证Finalizer对象一直可达的）。具体代码如下：
+ *     </li>
+ *     <li>
+ *         在发生gc的时候，在判断原始对象除了Finalizer对象引用之外，没有其他对象引用之后，就把Finalizer对象从对象链中取出，加入到Finalizer queue队列中。
+ *     </li>
+ *     <li>J
+ *     VM在启动时，会创建一个“finalize”线程，该线程会一直从“Finalizer queue”队列中取出对象，然后执行原始对象中的finalize方法。</li>
+ *     <li>
+ *         Finalizer对象以及其引用的原始对象，再也没有其他对象引用他们，属于不可达对象，再次GC的时候他们将会被回收掉。
+ *         （如果在finalize方法重新使该对象再次可达，再次GC该对象也不会被回收）。
+ *     </li>
+ * </ul>
+ *
+ * 使用finalize方法带来哪些影响？
+ * <ul>
+ *     <li>
+ *         创建一个包含finalize方法的对象时，需要额外创建Finalizer对象并且注册到Finalizer对象链中；
+ *         这样就需要额外的内存空间，并且创建finalize方法的对象的时间要长。创建普通对象和含finalize方法的对象时间相差4倍左右（循环10000创建一个不含任何变量的对象）。
+ *     </li>
+ *     <li>
+ *         和相比普通对象，含有finalize方法的对象的生存周期变长，普通对象一次GC就可以回收；
+ *         而含有finalize方法的对象至少需要两次gc，这样就会导致young gc阶段Object Copy阶段时间上升。
+ *     </li>
+ *     <li>
+ *         在gc时需要对包含finalize方法的对象做特殊处理，比如识别该对象是否只有Finalizer对象引用，
+ *         把Finalizer对象添加到queue队列这些都是在gc阶段完成，需要额外处理时间，在young gc属于Ref Proc时间，必然导致Ref Proc阶段时间上升。
+ *     </li>
+ *     <li>
+ *         因为“finalize”线程优先级比较低，如果cpu比较繁忙，可能会导致queue队列有挤压，
+ *         在经历多次young gc之后原始对象和Finalizer对象就会进入old区域，那么这些对象只能等待old gc才能被释放掉。
+ *     </li>
+ * </ul>
+ *
+ * @see FinalizerThread
+ */
 final class Finalizer extends FinalReference<Object> { /* Package-private; must be in
                                                           same package as the Reference
                                                           class */
@@ -241,6 +284,7 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
         }
     }
 
+    // JVM启动之后，会默认创建一个FinalizerThread的线程，来执行对象回收之后的Finalize方法。
     static {
         ThreadGroup tg = Thread.currentThread().getThreadGroup();
         for (ThreadGroup tgn = tg;
