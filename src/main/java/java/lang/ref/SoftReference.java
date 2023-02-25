@@ -77,7 +77,8 @@ public class SoftReference<T> extends Reference<T> {
      * 在JVM源码 hotspot/src/share/vm/memory/referenceProcessor.cpp 初始化的时候会调用<br>
      * java_lang_ref_SoftReference::set_clock(_soft_ref_timestamp_clock); 来更新此戳（此戳单位是毫秒）<br>
      * process_discovered_references 会执行软引用的查找，并将到期的软引用的 referent 置空<br>
-     * 影响软引用的回收策略未 JVM参数 SoftRefLRUPolicyMSPerMB ，默认值1000，字面意思是 每MB的软引用存活时间为1秒，当 SoftRefLRUPolicyMSPerMB = 0的时候，则软引用经历一次GC即被回收。<br>
+     * 影响软引用的回收策略未 JVM参数 SoftRefLRUPolicyMSPerMB ，默认值1000，字面意思是 每MB的软引用存活时间为1秒，
+     * 当 SoftRefLRUPolicyMSPerMB = 0的时候，则软引用经历一次GC即被回收。<br>
      * <br>
      * 回收策略有两种，代码在 hotspot/src/share/vm/memory/referencePolicy.cpp ：<br>
      * <pre>

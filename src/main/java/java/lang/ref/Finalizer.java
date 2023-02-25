@@ -44,8 +44,9 @@ import sun.misc.VM;
  *     <li>
  *         在发生gc的时候，在判断原始对象除了Finalizer对象引用之外，没有其他对象引用之后，就把Finalizer对象从对象链中取出，加入到Finalizer queue队列中。
  *     </li>
- *     <li>J
- *     VM在启动时，会创建一个“finalize”线程，该线程会一直从“Finalizer queue”队列中取出对象，然后执行原始对象中的finalize方法。</li>
+ *     <li>
+ *         JVM在启动时，会创建一个“finalize”线程，该线程会一直从“Finalizer queue”队列中取出对象，然后执行原始对象中的finalize方法。
+ *     </li>
  *     <li>
  *         Finalizer对象以及其引用的原始对象，再也没有其他对象引用他们，属于不可达对象，再次GC的时候他们将会被回收掉。
  *         （如果在finalize方法重新使该对象再次可达，再次GC该对象也不会被回收）。
